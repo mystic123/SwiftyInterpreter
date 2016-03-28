@@ -1,0 +1,48 @@
+func foo(n: int, k: &int) -> int {
+	func foo2(n: Array of bool) {
+		print n
+	}
+
+	func foo3() -> bool {
+		foo2(2)
+	}
+	if ((0 == 0 || n == l) && k != 10 && n <= 1 + 20 / 5 - 4) {
+		return 1
+	}
+	else if (n == 1) {
+		foo2()
+		return 1
+	} else {
+		return foo(n-1) + foo(n-2)
+	}
+	return 2
+}
+
+f = 10
+
+f2 = foo(10, f)
+
+print f
+
+f = f2
+
+f3.a = 10
+f3.b = f
+f3.c = {1,2,3,4,5}
+
+print f3.c[2]
+
+f = (8)
+
+f2 = (1,2,3)
+
+for x in f3.c {
+	x = x+1
+}
+
+var i,j,k
+
+while (-20 > f && ! (g >= -a)) {
+	var l, m
+	foo(i)
+}
