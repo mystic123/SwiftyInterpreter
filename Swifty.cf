@@ -2,24 +2,26 @@ comment "//" ;
 comment "/*" "*/" ;
 entrypoints Program ;
 
-Prog.    Program  ::= [Stmt] ;
+Prog.    Program  ::= [Form] ;
 
 D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Block ;
 D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Block ;
-D_Var.   Decl     ::= "var" [Ident] ;
 
 P_Decl.  PDecl    ::= Ident ":" Type ;
 
 separator            PDecl  "," ;
 separator            Stmt   "" ;
 separator            Exp    "," ;
+separator            Form   "" ;
 separator   nonempty Ident  "," ;
 separator   nonempty Type   "," ;
 
+F_Decl.   Form  ::= Decl ;
+F_Stmt.   Form  ::= Stmt ;
+F_Block.  Form  ::= Block ;
+
 S_Block.  Block ::= "{" [Stmt] "}" ;
 
-S_SBlock. Stmt ::= Block ;
-S_Decl.   Stmt ::= Decl ;
 S_While.  Stmt ::= "while" "(" Exp ")" Stmt ;
 S_For.    Stmt ::= "for" Ident "in" Exp Stmt ;
 S_If.     Stmt ::= "if" "(" Exp ")" Stmt ;
