@@ -30,7 +30,7 @@ run p s = let ts = myLLexer s in
                                  exitFailure
                   Ok tree  -> do putStrLn "\nParse Successful!"
                                  showTree tree
-                                 mapM_ (putStrLn) (evalProg tree)
+                                 execProg tree
                                  exitSuccess
 
 showTree :: (Show Program, Print Program) => Program -> IO ()
