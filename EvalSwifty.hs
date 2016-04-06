@@ -14,6 +14,7 @@ data ExprValue = I Integer | B Bool | None deriving (Eq, Ord, Show)
 
 type Var = Ident
 type State = M.Map Var ExprValue
+type StateIO a = S.StateT State IO a
 
 instance Num ExprValue where
    (+) (I a) (I b) = I $ a + b
@@ -29,21 +30,24 @@ instance Num ExprValue where
    fromInteger i = (I i)
 
 
-getValue :: (S.MonadState State m) => Expr -> m ExprValue
+getValue :: Expr -> StateIO ExprValue
 getValue e = S.get >>= return . evalExpr e
 
 execProg :: Program -> IO ()
-execProg (Prog ([])) = return ()
-execProg (Prog p) =  mapM_ (putStrLn . show) $ M.toList $ execProg' p M.empty
+execProg (Prog p) = do
+                     (_, s) <- execProg' p M.empty
+                     mapM_ (putStrLn . show) $ M.toList $ s
                         where
-                           execProg' ([]) s = s
-                           execProg' (f:fs) s = let s' = S.execState (execForm f) s
-                                                   in execProg' fs s'
+                           execProg' :: [Form] -> State -> IO ((), State)
+                           execProg' [] s = return ((), s)
+                           execProg' (f:fs) s = do
+                                                   (_, s') <- S.runStateT (execForm f) s
+                                                   execProg' fs $ s'
 
-execForm :: (S.MonadState State m) => Form -> m ()
-execForm (F_Stmt s) = execStmt s
+execForm :: Form -> StateIO ()
+execForm (F_Stmt stmt) = execStmt stmt
 
-execStmt :: (S.MonadState State m) => Stmt -> m ()
+execStmt :: Stmt -> StateIO ()
 execStmt (S_Assign x e) = do
                            v <- getValue e
                            S.modify $ M.insert x v
@@ -54,13 +58,13 @@ execStmt w@(S_While e s) = do
 execStmt (S_If e s) = do
                         B c <- getValue e
                         if c then execStmt s else return ()
-
 execStmt (S_IfE e s1 s2) = do
                               B c <- getValue e
                               execStmt $ if c then s1 else s2
 execStmt (S_Print e) = do
                         v <- getValue e
-                        (putStrLn "print")
+                        liftIO $ putStrLn $ show v
+                        return ()
 
 -- EXPRESSIONS
 evalExpr :: (MonadReader State m) => Expr -> m ExprValue
