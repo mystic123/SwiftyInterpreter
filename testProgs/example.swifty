@@ -40,9 +40,6 @@ for x in f3.c {
 	x = x+1
 }
 
-var i,j,k
-
 while (-20 > f && ! (g >= -a)) {
-	var l, m
 	foo(i)
 }

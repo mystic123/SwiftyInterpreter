@@ -11,7 +11,7 @@ P_Decl.  PDecl    ::= Ident ":" Type ;
 
 separator            PDecl  "," ;
 separator            Stmt   "" ;
-separator            Expr    "," ;
+separator            Expr   "," ;
 separator            Form   "" ;
 separator   nonempty Ident  "," ;
 separator   nonempty Type   "," ;
@@ -30,7 +30,7 @@ S_Return. Stmt ::= "return" Expr ;
 S_Print.  Stmt ::= "print" Expr ;
 S_Assign. Stmt ::= Ident "=" Expr ;
 S_StrAss. Stmt ::= Ident StructSub "=" Expr ;
-S_Expr.    Stmt ::= FCall ;
+S_Expr.   Stmt ::= FCall ;
 
 Fun_Call.   FCall ::= Ident "(" [Expr] ")" ;
 
