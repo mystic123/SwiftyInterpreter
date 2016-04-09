@@ -11,7 +11,7 @@ import AbsSwifty
 --import qualified Control.Monad.Cont as C
 import qualified Data.Map as M
 
-data ExprValue = I Integer | B Bool deriving (Eq, Ord)
+data ExprValue = I Integer | B Bool
 
 instance Show ExprValue where
    show (I n) = show n
@@ -26,6 +26,13 @@ type Env = M.Map Var Loc
 type Cont = Store -> IO (Store)
 type ContE = ExprValue -> Cont
 
+instance Eq ExprValue where
+   I a == I b = a == b
+   B a == B b = a == b
+
+instance Ord ExprValue where
+   I a <= I b = a <= b
+
 instance Num ExprValue where
    (+) (I a) (I b) = I $ a + b
    (-) (I a) (I b) = I $ a - b
@@ -39,6 +46,9 @@ instance Num ExprValue where
                | otherwise = I $ -1
    fromInteger i = (I i)
 
+
+exprDiv :: ExprValue -> ExprValue -> ExprValue
+exprDiv (I a) (I b) = I $ div a b
 
 newLoc :: Store -> Loc
 newLoc s = if null s then 0 else (fst $ M.findMax s) + 1
@@ -68,17 +78,17 @@ execStmt (S_Assign x e) s g k = evalExpr e s g k'
                                  where
                                     k' :: ContE
                                     k' n s' = k $ M.insert (getLoc s g x) n s'
-{-
-execStmt w@(S_While e s) = do
-                              B c <- getValue e
-                              when c $ execStmt s >> execStmt w
-execStmt (S_If e s) = do
-                        B c <- getValue e
-                        if c then execStmt s else return ()
-execStmt (S_IfE e s1 s2) = do
-                              B c <- getValue e
-                              execStmt $ if c then s1 else s2
--}
+--execStmt w@(S_While e s) = B c <- getValue e
+--                              when c $ execStmt s >> execStmt w
+execStmt (S_If e s1) s g k = evalExpr e s g k'
+                              where
+                                 k' :: ContE
+                                 k' (B b) = if b then execStmt s1 s g k
+                                             else k
+execStmt (S_IfE e s1 s2) s g k = evalExpr e s g k'
+                                  where
+                                    k' :: ContE
+                                    k' (B b) = execStmt (if b then s1 else s2) s g k
 execStmt (S_Print e) s g k = evalExpr e s g k'
                               where
                                  k' :: ContE
@@ -89,52 +99,43 @@ execStmt (S_Print e) s g k = evalExpr e s g k'
 -- EXPRESSIONS
 evalExpr :: Expr -> Store -> Env -> ContE -> Cont
 evalExpr (E_Const c) s g k = k $ evalConst c
-{-
-evalExpr k (E_Or x y)= do
-                        B v1 <- evalExpr x
-                        if v1 then return $ B v1 else evalExpr y
-evalExpr k (E_And x y) = do
-                        B v1 <- evalExpr x
-                        B v2 <- evalExpr y
-                        return $ B $ v1 && v2
-evalExpr k (E_Eq x y) = do
-                        v1 <- evalExpr x
-                        v2 <- evalExpr y
-                        return $ B $ v1 == v2
-evalExpr k (E_Neq x y) = do
-                        v1 <- evalExpr x
-                        v2 <- evalExpr y
-                        return $ B $ v1 /= v2
-evalExpr k (E_Lt x y) = evalComp (<) x y
-evalExpr k (E_Gt x y) = evalComp (>) x y
-evalExpr k (E_Lte x y) = evalComp (<=) x y
-evalExpr k (E_Gte x y) = evalComp (>=) x y
-evalExpr k (E_Add x y) = evalArithm (+) x y
-evalExpr k (E_Subt x y) = evalArithm (-) x y
-evalExpr k (E_Mult x y) = evalArithm (*) x y
-evalExpr k (E_Div x y) = evalArithm (div) x y
-evalExpr k (E_Min x) = do
-                        I v <- evalExpr k x
-                        return $ I $ (-1) * v
-evalExpr k (E_Neg x) = do
-                        B v <- evalExpr k x
-                        return $ B $ not v
-evalExpr k (E_VarName x) = do
-                           e <- asks $ M.lookup x
-                           return $ fromMaybe (error "Undefined variable") e
-evalComp :: (Integer -> Integer -> Bool) -> Expr -> Expr -> IO ExprValue
-evalComp f e1 e2 = do
-                     I v1 <- evalExpr e1
-                     I v2 <- evalExpr e2
-                     return $ B $ f v1 v2
+evalExpr (E_Or x y) s g k = evalExpr x s g k'
+                              where
+                                 k' :: ContE
+                                 k' (B b) = if b then k (B b)
+                                             else evalExpr y s g k
+evalExpr (E_And x y) s g k = evalExpr x s g k'
+                              where
+                                 k' :: ContE
+                                 k' (B b1) = evalExpr y s g (\(B b2) -> k $ B $ b1 && b2)
+evalExpr (E_Eq x y) s g k = evalExpr x s g k'
+                              where
+                                 k' :: ContE
+                                 k' v1 = evalExpr y s g (\v2 -> k $ B $ v1 == v2)
+evalExpr (E_Neq x y) s g k = evalExpr x s g k'
+                              where
+                                 k' :: ContE
+                                 k' v1 = evalExpr y s g (\v2 -> k $ B $ v1 /= v2)
+evalExpr (E_Lt x y) s g k = evalComp (<) x y s g k
+evalExpr (E_Gt x y) s g k = evalComp (>) x y s g k
+evalExpr (E_Lte x y) s g k = evalComp (<=) x y s g k
+evalExpr (E_Gte x y) s g k = evalComp (>=) x y s g k
+evalExpr (E_Add x y) s g k = evalArithm (+) x y s g k
+evalExpr (E_Subt x y) s g k = evalArithm (-) x y s g k
+evalExpr (E_Mult x y) s g k= evalArithm (*) x y s g k
+evalExpr (E_Div x y) s g k= evalArithm (exprDiv) x y s g k
+evalExpr (E_Min x) s g k = evalExpr x s g (\(I n) -> k $ I $ (-1)*n)
+evalExpr (E_Neg x) s g k = evalExpr x s g (\(B b) -> k $ B $ not b)
+evalExpr (E_VarName x) s g k = let Just l = M.lookup x g
+                                   n = M.lookup l s
+                                 in k $ fromMaybe (error "Undefined variable") n
 
-evalArithm :: (MonadReader State m) => (Integer -> Integer -> Integer) -> Expr -> Expr -> m ExprValue
-evalArithm f e1 e2 = do
-                        I v1 <- evalExpr e1
-                        I v2 <- evalExpr e2
-                        return $ I $ f v1 v2
+evalComp :: (ExprValue -> ExprValue -> Bool) -> Expr -> Expr -> Store -> Env -> ContE -> Cont
+evalComp f e1 e2 s g k = evalExpr e1 s g (\v1 -> evalExpr e2 s g (\v2 -> k $ B $ f v1 v2))
 
--}
+evalArithm :: (ExprValue -> ExprValue -> ExprValue) -> Expr -> Expr -> Store -> Env -> ContE -> Cont
+evalArithm f e1 e2 s g k = evalExpr e1 s g (\v1 -> evalExpr e2 s g (\v2 -> k $ f v1 v2))
+
 evalConst :: Constant -> ExprValue
 evalConst (Integer_Const n) = I n
 evalConst (True_Const) = B True
