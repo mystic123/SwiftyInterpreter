@@ -64,13 +64,10 @@ execProg (Prog p) = do
                      s <- execProg' p M.empty M.empty
                      mapM_ (putStrLn . show) $ M.toList s
                      where
-                        execProg' :: [Form] -> Store -> Env -> IO Store
+                        execProg' :: [Stmt] -> Store -> Env -> IO Store
                         execProg' [] s g = return s
                         execProg' (f:fs) s g = do
-                                                execForm f s g (\s' -> execProg' fs s' g) s
-
-execForm :: Form -> Store -> Env -> Cont -> Cont
-execForm (F_Stmt stmt) = execStmt stmt
+                                                execStmt f s g (\s' -> execProg' fs s' g) s
 
 -- STATEMENTS
 execStmt :: Stmt -> Store -> Env -> Cont -> Cont

@@ -2,30 +2,27 @@ comment "//" ;
 comment "/*" "*/" ;
 entrypoints Program ;
 
-Prog.    Program  ::= [Form] ;
+Prog.    Program  ::= [Stmt] ;
 
-D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Block ;
-D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Block ;
+D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Stmt ;
+D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Stmt ;
 
 P_Decl.  PDecl    ::= Ident ":" Type ;
 
 separator            PDecl  "," ;
 separator            Stmt   "" ;
 separator            Expr   "," ;
-separator            Form   "" ;
 separator   nonempty Ident  "," ;
 separator   nonempty Type   "," ;
 
-F_Decl.   Form  ::= Decl ;
-F_Stmt.   Form  ::= Stmt ;
-F_Block.  Form  ::= Block ;
+B_Block.  Block ::= "{" [Stmt] "}" ;
 
-S_Block.  Block ::= "{" [Stmt] "}" ;
-
+S_Block.	 Stmt ::= Block ;
+S_Decl.	 Stmt ::= Decl ;
 S_While.  Stmt ::= "while" "(" Expr ")" Stmt ;
 S_For.    Stmt ::= "for" Ident "in" Expr Stmt ;
 S_If.     Stmt ::= "if" "(" Expr ")" Stmt ;
-S_IfE.    Stmt ::= "if" "(" Expr ")" Stmt "else" Stmt ;
+S_IfE.    Stmt ::= "if" "(" Expr ")" Block "else" Stmt ;
 S_Return. Stmt ::= "return" Expr ;
 S_Print.  Stmt ::= "print" Expr ;
 S_Assign. Stmt ::= Ident "=" Expr ;
