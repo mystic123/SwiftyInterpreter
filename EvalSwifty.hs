@@ -25,6 +25,8 @@ type Env = M.Map Var Loc
 
 type Cont = Store -> IO (Store)
 type ContE = ExprValue -> Cont
+type ContD = Store -> Env -> Cont
+type ContB = Store -> Cont
 
 instance Eq ExprValue where
    I a == I b = a == b
@@ -59,6 +61,9 @@ getLoc s g x = let l = M.lookup x g
                   then fromJust l
                   else getLoc s (M.insert x (newLoc s) g) x
 
+newVar :: Ident -> Loc -> Env -> Env
+newVar = M.insert
+
 execProg :: Program -> IO ()
 execProg (Prog p) = do
                      s <- execProg' p M.empty M.empty
@@ -69,14 +74,35 @@ execProg (Prog p) = do
                         execProg' (f:fs) s g = do
                                                 execStmt f s g (\s' -> execProg' fs s' g) s
 
+-- DECLARATIONS
+evalDecl :: Decl -> Store -> Env -> ContD -> Cont
+evalDecl (D_Var x e) s g k = evalExpr e s g k' s
+                              where
+                                 k' :: ContE
+                                 k' n s' = let l = newLoc s
+                                               g' = newVar x l g
+                                               s'' = M.insert l n s'
+                                                in k s' g'
+
+-- BLOCK
+execBlock :: Block -> Store -> Env -> Cont -> Cont
+execBlock (B_Block b) = execBlock' b
+                           where
+                              execBlock' :: [Stmt] -> Store -> Env -> Cont -> Cont
+                              execBlock' [] s g k = k
+                              execBlock' (b:bs) s g k = execStmt b s g (\s' -> execBlock' bs s' g k s)
+
 -- STATEMENTS
 execStmt :: Stmt -> Store -> Env -> Cont -> Cont
-execStmt (S_Assign x e) s g k = evalExpr e s g k'
+{-execStmt (S_Assign x e) s g k = evalExpr e s g k'
                                  where
                                     k' :: ContE
                                     k' n s' = k $ M.insert (getLoc s g x) n s'
+-}
 --execStmt w@(S_While e s) = B c <- getValue e
 --                              when c $ execStmt s >> execStmt w
+execStmt (S_Decl d) s g k = evalDecl d s g (\s' g' -> k)
+execStmt (S_Block b) s g k = execBlock b s g k
 execStmt (S_If e s1) s g k = evalExpr e s g k'
                               where
                                  k' :: ContE
@@ -85,13 +111,16 @@ execStmt (S_If e s1) s g k = evalExpr e s g k'
 execStmt (S_IfE e s1 s2) s g k = evalExpr e s g k'
                                   where
                                     k' :: ContE
-                                    k' (B b) = execStmt (if b then s1 else s2) s g k
+                                    k' (B b) = if b then execBlock s1 s g k
+                                                else execStmt s2 s g k
 execStmt (S_Print e) s g k = evalExpr e s g k'
                               where
                                  k' :: ContE
                                  k' n s' = do
                                              putStrLn $ show n
-                                             return s'
+                                             putStrLn $ show $ null g
+                                             mapM_ (putStrLn . show) $ M.toList g
+                                             k s'
 
 -- EXPRESSIONS
 evalExpr :: Expr -> Store -> Env -> ContE -> Cont

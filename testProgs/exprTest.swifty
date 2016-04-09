@@ -1,11 +1,22 @@
 x = 4
 y = 10
 print 10
-return 1
-foo(2)
-b.a = 3
-while (true)
-	return 3
+print x
+/*
+if (x == 4) {
+	print 666
+}
+*/
+//x = x + 1
+x = 20
+/*
+if (x == 5) {
+	print 777
+}
+else {
+	print 888
+}
+*/
 /*a = 5*5 < 100
 b = 4 - 10 >= 2
 c = -2 + 2 * 100 == 2000/10 - 2
