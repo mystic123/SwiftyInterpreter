@@ -6,13 +6,11 @@ module EvalSwifty where
 
 import Data.Maybe
 import AbsSwifty
+import ErrM
+import Data.List
 import qualified Data.Map as M
 
-data ExprValue = I Integer | B Bool | None
-
-instance Show ExprValue where
-   show (I n) = show n
-   show (B b) = show b
+data ExprValue = I Integer | B Bool | A Type [ExprValue] | T [ExprValue] | S (M.Map Var ExprValue) | None
 
 type Loc = Integer
 type Var = Ident
@@ -28,18 +26,26 @@ type ContE = ExprValue -> Cont
 type ContD = Store -> Env -> Cont
 type ContB = Store -> Cont
 type ContR = ExprValue -> Cont
+type ContA = [ExprValue] -> Cont
 
 instance Eq ExprValue where
    I a == I b = a == b
    B a == B b = a == b
+   A t1 v1 == A t2 v2
+                     | t1 /= t2 = False
+                     | otherwise = v1 == v2
+   T v1 == T v2 = v1 == v2
 
 instance Ord ExprValue where
    I a <= I b = a <= b
 
 instance Num ExprValue where
    (+) (I a) (I b) = I $ a + b
+   (+) (A T_Int a) (I b) = A T_Int $ map (+ (I b)) a
    (-) (I a) (I b) = I $ a - b
+   (-) (A T_Int a) (I b) = A T_Int $ map ((-) (I b)) a
    (*) (I a) (I b) = I $ a * b
+   (*) (A T_Int a) (I b) = A T_Int $ map (* (I b)) a
    abs (I a)
             | a  > 0 = I a
             | otherwise = I $ (-1) * a
@@ -49,9 +55,16 @@ instance Num ExprValue where
                | otherwise = I $ -1
    fromInteger i = (I i)
 
+instance Show ExprValue where
+   show (I n) = show n
+   show (B b) = show b
+   show (A t l) = "{" ++ (intercalate "," $ map show l) ++ "}"
+   show (T l) = "(" ++ (intercalate "," $ map show l) ++ ")"
 
+-- HELPER FUNCTIONS
 exprDiv :: ExprValue -> ExprValue -> ExprValue
 exprDiv (I a) (I b) = I $ div a b
+exprDiv (A T_Int a) (I b) = A T_Int $ map (exprDiv (I b)) a
 
 newLoc :: Store -> Loc
 newLoc s = if null s then 0 else (fst $ M.findMax s) + 1
@@ -62,10 +75,14 @@ getLoc x s g = let l = M.lookup x $ fst g
                   then fromJust l
                   else newLoc s
 
-newVar :: Ident -> Loc -> Env -> Env
+newVar :: Var -> Loc -> Env -> Env
 newVar x l (gv, gf) = (M.insert x l gv, gf)
 
-newFunc :: Ident -> [PDecl] -> [Loc] -> Stmt -> Env -> Env
+newVars :: [Var] -> [Loc] -> Env -> Env
+newVars [] [] g = g
+newVars (x:xs) (l:ls) (gv, gf) = newVars xs ls (M.insert x l gv, gf)
+
+newFunc :: Var -> [PDecl] -> [Loc] -> Stmt -> Env -> Env
 newFunc f pd l s (gv, gf) = (gv, M.insert f (pd, l, s) gf)
 
 emptyStore :: Store
@@ -77,38 +94,9 @@ emptyEnv = (M.empty, M.empty)
 constM :: (Monad m) => a -> m (a)
 constM = return
 
--- PROGRAM
-execProg :: Program -> IO ()
-execProg (Prog p) = do
-                     s <- execProg' p emptyStore emptyEnv
-                     mapM_ (putStrLn . show) $ M.toList s
-                     where
-                        execProg' :: [Stmt] -> Store -> Env -> IO Store
-                        execProg' [] s g = return s
-                        execProg' x s g = let
-                                                k' = (\s' g' -> constM)
-                                                kr' = (\n -> constM)
-                                                k = execStmts x g k' kr'
-                                          in k s
+undefVar (Ident x) = error $ concat ["Undefined variable: ", show x]
 
--- DECLARATIONS
-evalDecl :: Decl -> Env -> ContD -> Cont
-evalDecl (D_Var x e) g k = evalExpr e g k'
-                              where
-                                 k' :: ContE
-                                 k' n s = let
-                                             l = getLoc x s g
-                                             g' = newVar x l g
-                                             s' = M.insert l n s
-                                          in k s' g' s'
-evalDecl (D_Fun foo pd rtype stmt) g k = k'
-                                          where
-                                          k' :: Cont
-                                          k' s = let
-                                                    pd' = filter (not . isRef) pd
-                                                    (locs, s') = getLocs pd' s
-                                                    g' = newFunc foo pd locs stmt g
-                                                 in k s' g' s'
+undefFunc (Ident f) = error $ concat ["Undefined function: ", show f]
 
 isRef :: PDecl -> Bool
 isRef (P_Decl _ (T_Ref _)) = True
@@ -118,10 +106,73 @@ getLocs :: [PDecl] -> Store -> ([Loc], Store)
 getLocs [] s = ([], s)
 getLocs (p:ps) s
                | isRef p = getLocs ps s
-               | otherwise = let
+               | otherwise = ((l:locs), M.insert l 0 s')
+                              where
                                  (locs, s') = getLocs ps s
                                  l = newLoc s'
-                             in ([l] ++ locs, M.insert l 0 s')
+
+getLocs2 :: [Var] -> [ExprValue] -> Store -> ([Loc], Store)
+getLocs2 [] [] s = ([], s)
+getLocs2 (x:xs) (v:vs) s = (l:locs, M.insert l v s')
+                           where
+                              (locs, s') = getLocs2 xs vs s
+                              l = newLoc s'
+
+getType :: ExprValue -> Type
+getType (I _) = T_Int
+getType (B _) = T_Bool
+getType (A t _) = T_Arr t
+
+-- PROGRAM
+execProg :: Program -> IO ()
+execProg (Prog p) = do
+                     s <- execProg' p emptyStore emptyEnv
+                     mapM_ (putStrLn . show) $ M.toList s
+                     where
+                        execProg' :: [Stmt] -> Store -> Env -> IO Store
+                        execProg' [] s g = return s
+                        execProg' x s g = k s
+                                          where
+                                             k' = (\s' g' -> constM)
+                                             kr' = (\n -> constM)
+                                             k = execStmts x g k' kr'
+
+-- DECLARATIONS
+evalDecl :: Decl -> Env -> ContD -> Cont
+evalDecl (D_Var x e) g k = evalExpr e g k'
+                              where
+                                 k' :: ContE
+                                 k' n s = k s' g' s'
+                                          where
+                                             l = getLoc x s g
+                                             g' = newVar x l g
+                                             s' = M.insert l n s
+evalDecl (D_Fun foo pd rtype stmt) g k = k'
+                                          where
+                                          k' :: Cont
+                                          k' s = let
+                                                    pd' = filter (not . isRef) pd
+                                                    (locs, s') = getLocs pd' s
+                                                    g' = newFunc foo pd locs stmt g
+                                                 in k s' g' s'
+evalDecl (D_Proc proc pd stmt) g k = k'
+                                       where
+                                       k' :: Cont
+                                       k' s = let
+                                                 pd' = filter (not . isRef) pd
+                                                 (locs, s') = getLocs pd' s
+                                                 g' = newFunc proc pd locs stmt g
+                                              in k s' g' s'
+evalDecl (D_MVar x xs (Tup e es)) g k = evalExprList (x:xs) (e:es) [] g k
+                                          where
+                                             evalExprList :: [Var] -> [Expr] -> [ExprValue] -> Env -> ContD -> Cont
+                                             evalExprList x [] y g k = multVarDecl x (reverse y) g k
+                                             evalExprList x (e:es) y g k = evalExpr e g (\n -> evalExprList x es (n:y) g k)
+                                             multVarDecl :: [Var] -> [ExprValue] -> Env -> ContD -> Cont
+                                             multVarDecl x y g k s = let
+                                                                        (locs, s') = getLocs2 x y s
+                                                                        g' = newVars x locs g
+                                                                     in k s' g' s'
 
 -- BLOCK
 execBlock :: Block -> Env -> ContB -> ContR -> Cont
@@ -167,11 +218,39 @@ execStmt (S_Print e) g k kr = evalExpr e g k'
                                              mapM_ (putStrLn . show) $ M.toList $ snd g
                                              putStrLn "----------\nSTORE:"
                                              mapM_ (putStrLn . show) $ M.toList s
-                                             putStrLn "-----------"
+                                             putStrLn "-----------\n"
                                              k s g s
 
 -- EXPRESSIONS
+callFunc :: [Expr] -> [PDecl] -> [Loc] -> Stmt -> Env -> ContE -> Cont
+callFunc [] _ _ stmt g k = execStmt stmt g (\s _ -> constM) k
+callFunc (a:as) (p:ps) locs@(l:ls) stmt g@(gv,gf) k
+                                                   | isRef p = callFunc as ps locs stmt (gv', gf) k
+                                                   | otherwise = evalExpr a g k'
+                                                                  where
+                                                                     (P_Decl x _) = p
+                                                                     (E_VarName y) = a
+                                                                     l' = fromMaybe (undefVar y) $ M.lookup y gv
+                                                                     gv' = M.insert x l' gv
+                                                                     gv'' = M.insert x l gv
+                                                                     k' :: ContE
+                                                                     k' n s = callFunc as ps ls stmt (gv'', gf) (\n -> k n) $ M.insert l n s
+
+evalExprList :: [Expr] -> Env -> ContA -> Cont
+evalExprList l g k = evalExprList' l [] g k
+                     where
+                        evalExprList' [] v g k = k $ reverse v
+                        evalExprList' (e:es) v g k = evalExpr e g (\n -> evalExprList' es (n:v) g k)
+
+createTuple :: [Expr] -> Env -> ContE -> Cont
+createTuple l g k = evalExprList l g (\arr -> k (T arr))
+
+createArray :: [Expr] -> Env -> ContE -> Cont
+createArray l g k = evalExprList l g (\(x:xs) -> k (A (getType x) (x:xs)))
+
 evalExpr :: Expr -> Env -> ContE -> Cont
+evalExpr (E_TupI (Tup e es)) g k = createTuple (e:es) g k
+evalExpr (E_ArrI (Arr es)) g k = createArray es g k
 evalExpr (E_Const c) g k = k $ evalConst c
 evalExpr (E_Or x y) g k = evalExpr x g k'
                               where
@@ -196,47 +275,19 @@ evalExpr (E_Lte x y) g k = evalComp (<=) x y g k
 evalExpr (E_Gte x y) g k = evalComp (>=) x y g k
 evalExpr (E_Add x y) g k = evalArithm (+) x y g k
 evalExpr (E_Subt x y) g k = evalArithm (-) x y g k
-evalExpr (E_Mult x y) g k= evalArithm (*) x y g k
-evalExpr (E_Div x y) g k= evalArithm (exprDiv) x y g k
+evalExpr (E_Mult x y) g k = evalArithm (*) x y g k
+evalExpr (E_Div x y) g k = evalArithm (exprDiv) x y g k
 evalExpr (E_Min x) g k = evalExpr x g (\(I n) -> k $ I $ (-1)*n)
 evalExpr (E_Neg x) g k = evalExpr x g (\(B b) -> k $ B $ not b)
-evalExpr (E_VarName x) g k = (\s -> let
-                                       l = M.lookup x $ fst g
-                                       n = M.lookup (fromMaybe (error "Undefined variable") l) s
-                                    in k (fromMaybe (error "Undefined variable") n) s)
-evalExpr (E_FuncCall (Fun_Call foo args)) g@(gv, gf) k = let
-                                          (pd, l, stmt) = fromMaybe (error "Undefined funcion") $ M.lookup foo gf
-                                          --g' = modifyEnvFunc pd l args g
-                                       in callFunc args pd l stmt g k--execStmt stmt g' (\_ _ -> k None) k
+evalExpr (E_VarName x) (gv, gf) k = (\s -> let
+                                       l = M.lookup x gv
+                                       n = M.lookup (fromMaybe (undefVar x) l) s
+                                    in k (fromMaybe (undefVar x) n) s)
+evalExpr (E_FuncCall (Fun_Call foo args)) g k = callFunc args pd l stmt g k
+                                                where
+                                                   (pd, l, stmt) = fromMaybe (undefFunc foo) $ M.lookup foo $ snd g
+evalExpr (E_ArrS e (Arr_Sub i)) g k = evalExpr e g (\(A _ v) -> evalExpr i g (\(I i) -> k $ (!!) v $ fromInteger i))
 
-callFunc :: [Expr] -> [PDecl] -> [Loc] -> Stmt -> Env -> ContE -> Cont
-callFunc [] pd locs stmt g k = execStmt stmt g (\_ _ -> k None) k
-callFunc (a:as) (p:ps) locs@(l:ls) stmt g@(gv,gf) k
-                                                   | isRef p = let
-                                                                  (P_Decl x _) = p
-                                                                  (E_VarName y) = a
-                                                                  l' = fromMaybe (error "Undefined variable") $ M.lookup y gv
-                                                                  gv' = M.insert x l' gv
-                                                               in callFunc as ps locs stmt (gv', gf) k
-                                                   | otherwise = let
-                                                                    (P_Decl x _) = p
-                                                                    gv' = M.insert x l gv
-                                                                 in evalExpr a g (\n -> \s -> callFunc as ps ls stmt (gv', gf) (\n -> k n) (M.insert l n s))
-{-
-modifyEnvFunc :: [PDecl] -> [Loc] -> [Expr] -> Env -> Env
-modifyEnvFunc [] _ _ g = g
-modifyEnvFunc (p:ps) (l:ls) args@(a:as) g@(gv, gf)
-                                          | isRef p = let
-                                                         (P_Decl x _) = p
-                                                         (E_VarName y) = a
-                                                         loc = fromMaybe (error "Undefined variable") $ M.lookup y gv
-                                                         gv' = M.insert x loc gv
-                                                      in modifyEnvFunc ps (l:ls) as (gv', gf)
-                                          | otherwise = let
-                                                            (P_Decl x _) = p
-                                                            gv' = M.insert x l gv
-                                                        in modifyEnvFunc ps ls args (gv', gf)
--}
 evalComp :: (ExprValue -> ExprValue -> Bool) -> Expr -> Expr -> Env -> ContE -> Cont
 evalComp f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ B $ f v1 v2))
 

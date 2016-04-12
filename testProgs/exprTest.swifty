@@ -1,9 +1,18 @@
 func f(n:&int, k:int) -> int {
 	print k
 	k = 5
+	n = 10
 	return 9
 }
 
-x = 2
-print f(x, 6)
-print x
+print (1, true, 4)
+x = (5, true, 9, false)
+
+a,b = (3,4)
+
+print a
+print b
+
+y = {1,2,true,4}
+
+print y
