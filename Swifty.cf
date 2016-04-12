@@ -1,3 +1,5 @@
+-- Autor: Paweł Kapica, 334579
+-- Gramatyka języka programowania
 comment "//" ;
 comment "/*" "*/" ;
 entrypoints Program ;
