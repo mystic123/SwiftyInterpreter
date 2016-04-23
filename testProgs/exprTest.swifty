@@ -5,14 +5,13 @@ func f(n:&int, k:int) -> int {
 	return 9
 }
 
-print (1, true, 4)
-x = (5, true, 9, false)
+z = 10
 
-a,b = (3,4)
+for x in {1,2,3} {
+	print x
+}
 
-print a
-print b
-
-y = {1,2,true,4}
+y = 4
 
 print y
+

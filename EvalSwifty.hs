@@ -29,37 +29,38 @@ type ContR = ExprValue -> Cont
 type ContA = [ExprValue] -> Cont
 
 instance Eq ExprValue where
-   I a == I b = a == b
-   B a == B b = a == b
+   I a == I b     = a == b
+   B a == B b     = a == b
    A t1 v1 == A t2 v2
                      | t1 /= t2 = False
                      | otherwise = v1 == v2
-   T v1 == T v2 = v1 == v2
+   T v1 == T v2   = v1 == v2
 
 instance Ord ExprValue where
    I a <= I b = a <= b
 
 instance Num ExprValue where
-   (+) (I a) (I b) = I $ a + b
+   (+) (I a) (I b)       = I $ a + b
    (+) (A T_Int a) (I b) = A T_Int $ map (+ (I b)) a
-   (-) (I a) (I b) = I $ a - b
+   (-) (I a) (I b)       = I $ a - b
    (-) (A T_Int a) (I b) = A T_Int $ map ((-) (I b)) a
-   (*) (I a) (I b) = I $ a * b
+   (*) (I a) (I b)       = I $ a * b
    (*) (A T_Int a) (I b) = A T_Int $ map (* (I b)) a
    abs (I a)
             | a  > 0 = I a
-            | otherwise = I $ (-1) * a
+            | otherwise  = I $ (-1) * a
    signum (I a)
-               | a == 0 = I 0
-               | a > 0 = I 1
+               | a == 0  = I 0
+               | a > 0   = I 1
                | otherwise = I $ -1
    fromInteger i = (I i)
 
 instance Show ExprValue where
-   show (I n) = show n
-   show (B b) = show b
-   show (A t l) = "{" ++ (intercalate "," $ map show l) ++ "}"
-   show (T l) = "(" ++ (intercalate "," $ map show l) ++ ")"
+   show (I n)     = show n
+   show (B b)     = show b
+   show (A t l)   = "{" ++ (intercalate "," $ map show l) ++ "}"
+   show (T l)     = "(" ++ (intercalate "," $ map show l) ++ ")"
+   show (S str)   = show $ M.toList str
 
 -- HELPER FUNCTIONS
 exprDiv :: ExprValue -> ExprValue -> ExprValue
@@ -126,8 +127,9 @@ getType (A t _) = T_Arr t
 -- PROGRAM
 execProg :: Program -> IO ()
 execProg (Prog p) = do
-                     s <- execProg' p emptyStore emptyEnv
-                     mapM_ (putStrLn . show) $ M.toList s
+                     execProg' p emptyStore emptyEnv
+                     return ()
+                     --mapM_ (putStrLn . show) $ M.toList s
                      where
                         execProg' :: [Stmt] -> Store -> Env -> IO Store
                         execProg' [] s g = return s
@@ -173,6 +175,17 @@ evalDecl (D_MVar x xs (Tup e es)) g k = evalExprList (x:xs) (e:es) [] g k
                                                                         (locs, s') = getLocs2 x y s
                                                                         g' = newVars x locs g
                                                                      in k s' g' s'
+evalDecl (D_Stct x (Str_Sub y) e) g k = evalExpr e g k'
+                                       where
+                                          k' :: ContE
+                                          k' n s = k s' g' s'
+                                                   where
+                                                      l = getLoc x s g
+                                                      g' = newVar x l g
+                                                      str = M.lookup l s
+                                                      S str' = if isJust str then fromJust str else S M.empty
+                                                      str'' = S (M.insert y n str')
+                                                      s' = M.insert l str'' s
 
 -- BLOCK
 execBlock :: Block -> Env -> ContB -> ContR -> Cont
@@ -188,24 +201,26 @@ execStmts [] g k kr = (\s -> k s g s)
 execStmts (x:xs) g k kr = execStmt x g (\s' g' -> execStmts xs g' k kr) kr
 
 execStmt :: Stmt -> Env -> ContS -> ContR -> Cont
+execStmt (S_Block b) g k kr = execBlock b g (\s -> k s g) kr
+execStmt (S_Decl d) g k kr = evalDecl d g (\s' g' -> k s' g')
 execStmt w@(S_While e s) g k kr = evalExpr e g k'
                                  where
                                     k' :: ContE
                                     k' (B b) = if b
                                                 then execStmt s g (\s' g' -> execStmt w g' k kr) kr
                                                 else (\s -> k s g s)
-execStmt (S_Decl d) g k kr = evalDecl d g (\s' g' -> k s' g')
-execStmt (S_Block b) g k kr = execBlock b g (\s -> k s g) kr
-execStmt (S_Expr e) g k kr = evalExpr (E_FuncCall e) g (\_ -> constM)
+execStmt (S_For x e stmt) g k kr = execFor x e stmt g k kr
 execStmt (S_If e s1) g k kr = evalExpr e g k'
                               where
                                  k' :: ContE
-                                 k' (B b) = if b then execStmt s1 g k kr
+                                 k' (B b) = if b
+                                             then execStmt s1 g k kr
                                              else (\s -> k s g s)
 execStmt (S_IfE e s1 s2) g k kr = evalExpr e g k'
                                   where
                                     k' :: ContE
-                                    k' (B b) = if b then execBlock s1 g (\s -> k s g) kr
+                                    k' (B b) = if b
+                                                then execBlock s1 g (\s -> k s g) kr
                                                 else execStmt s2 g k kr
 execStmt (S_Return e) g k kr = evalExpr e g (\n -> kr n)
 execStmt (S_Print e) g k kr = evalExpr e g k'
@@ -220,6 +235,20 @@ execStmt (S_Print e) g k kr = evalExpr e g k'
                                              mapM_ (putStrLn . show) $ M.toList s
                                              putStrLn "-----------\n"
                                              k s g s
+execStmt (S_Expr e) g k kr = evalExpr (E_FuncCall e) g (\_ -> constM)
+
+execFor :: Var -> Expr -> Stmt -> Env -> ContS -> ContR -> Cont
+execFor x e stmt g k kr = evalExpr e g (\(A _ arr) -> execFor' x arr stmt g k kr)
+                           where
+                              execFor' :: Var -> [ExprValue] -> Stmt -> Env -> ContS -> ContR -> Cont
+                              execFor' x [] stmt g k kr s = k s g s
+                              execFor' x (e:es) stmt g@(gv,gf) k kr s = let
+                                                                           block = (B_Block [stmt])
+                                                                           l = newLoc s
+                                                                           s' = M.insert l e s
+                                                                           g' = (M.insert x l gv,gf)
+                                                                        in execBlock block g' (\s -> execFor' x es stmt g k kr) kr s'
+
 
 -- EXPRESSIONS
 callFunc :: [Expr] -> [PDecl] -> [Loc] -> Stmt -> Env -> ContE -> Cont
@@ -292,7 +321,7 @@ evalComp :: (ExprValue -> ExprValue -> Bool) -> Expr -> Expr -> Env -> ContE -> 
 evalComp f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ B $ f v1 v2))
 
 evalArithm :: (ExprValue -> ExprValue -> ExprValue) -> Expr -> Expr -> Env -> ContE -> Cont
-evalArithm f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ f v1 v2))
+evalArithm f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ if v2 /= 0 then f v1 v2 else (error "Division by zero!")))
 
 evalConst :: Constant -> ExprValue
 evalConst (Integer_Const n) = I n

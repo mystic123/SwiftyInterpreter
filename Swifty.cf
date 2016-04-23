@@ -10,6 +10,7 @@ D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Stmt ;
 D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Stmt ;
 D_Var.	Decl		::= Ident "=" Expr ;
 D_MVar.  Decl     ::= Ident "," [Ident] "=" Tuple ;
+D_Stct.	Decl		::= Ident StructSub "=" Expr ;
 
 P_Decl.  PDecl    ::= Ident ":" Type ;
 
@@ -29,7 +30,6 @@ S_If.     Stmt ::= "if" "(" Expr ")" Stmt ;
 S_IfE.    Stmt ::= "if" "(" Expr ")" Block "else" Stmt ;
 S_Return. Stmt ::= "return" Expr ;
 S_Print.  Stmt ::= "print" Expr ;
-S_StrAss. Stmt ::= Ident StructSub "=" Expr ;
 S_Expr.   Stmt ::= FCall ;
 
 Fun_Call.   FCall ::= Ident "(" [Expr] ")" ;
