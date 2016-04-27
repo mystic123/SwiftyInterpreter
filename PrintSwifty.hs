@@ -93,6 +93,7 @@ instance Print Decl where
     D_Fun id pdecls type_ stmt -> prPrec i 0 (concatD [doc (showString "func"), prt 0 id, doc (showString "("), prt 0 pdecls, doc (showString ")"), doc (showString "->"), prt 0 type_, prt 0 stmt])
     D_Proc id pdecls stmt -> prPrec i 0 (concatD [doc (showString "func"), prt 0 id, doc (showString "("), prt 0 pdecls, doc (showString ")"), prt 0 stmt])
     D_Var id expr -> prPrec i 0 (concatD [doc (showString "var"), prt 0 id, doc (showString "="), prt 0 expr])
+    D_Str id -> prPrec i 0 (concatD [doc (showString "struct"), prt 0 id])
     D_MVar id ids tuple -> prPrec i 0 (concatD [doc (showString "var"), prt 0 id, doc (showString ","), prt 0 ids, doc (showString "="), prt 0 tuple])
 
 instance Print PDecl where
@@ -105,14 +106,19 @@ instance Print Block where
   prt i e = case e of
     B_Block stmts -> prPrec i 0 (concatD [doc (showString "{"), prt 0 stmts, doc (showString "}")])
 
+instance Print Acc where
+  prt i e = case e of
+    A_Iden id -> prPrec i 0 (concatD [prt 0 id])
+    A_Arr acc arraysub -> prPrec i 0 (concatD [prt 0 acc, prt 0 arraysub])
+    A_Str acc structsub -> prPrec i 0 (concatD [prt 0 acc, prt 0 structsub])
+  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print Stmt where
   prt i e = case e of
     S_Block block -> prPrec i 0 (concatD [prt 0 block])
     S_Decl decl -> prPrec i 0 (concatD [prt 0 decl])
-    S_Assign id expr -> prPrec i 0 (concatD [prt 0 id, doc (showString "="), prt 0 expr])
-    S_ArrAss id arraysub expr -> prPrec i 0 (concatD [prt 0 id, prt 0 arraysub, doc (showString "="), prt 0 expr])
-    S_StrAss id structsub expr -> prPrec i 0 (concatD [prt 0 id, prt 0 structsub, doc (showString "="), prt 0 expr])
-    S_MAss id ids tuple -> prPrec i 0 (concatD [prt 0 id, doc (showString ","), prt 0 ids, doc (showString "="), prt 0 tuple])
+    S_Assign acc expr -> prPrec i 0 (concatD [prt 0 acc, doc (showString "="), prt 0 expr])
+    S_MAss acc accs tuple -> prPrec i 0 (concatD [prt 0 acc, doc (showString ","), prt 0 accs, doc (showString "="), prt 0 tuple])
     S_While expr stmt -> prPrec i 0 (concatD [doc (showString "while"), doc (showString "("), prt 0 expr, doc (showString ")"), prt 0 stmt])
     S_For id expr stmt -> prPrec i 0 (concatD [doc (showString "for"), prt 0 id, doc (showString "in"), prt 0 expr, prt 0 stmt])
     S_If expr stmt -> prPrec i 0 (concatD [doc (showString "if"), doc (showString "("), prt 0 expr, doc (showString ")"), prt 0 stmt])
@@ -144,8 +150,8 @@ instance Print Expr where
     E_Min expr -> prPrec i 7 (concatD [doc (showString "-"), prt 8 expr])
     E_Neg expr -> prPrec i 7 (concatD [doc (showString "!"), prt 8 expr])
     E_ArrI array -> prPrec i 8 (concatD [prt 0 array])
-    E_ArrS id arraysub -> prPrec i 8 (concatD [prt 0 id, prt 0 arraysub])
-    E_StrS id structsub -> prPrec i 8 (concatD [prt 0 id, prt 0 structsub])
+    E_ArrS acc arraysub -> prPrec i 8 (concatD [prt 0 acc, prt 0 arraysub])
+    E_StrS acc structsub -> prPrec i 8 (concatD [prt 0 acc, prt 0 structsub])
     E_FuncCall fcall -> prPrec i 8 (concatD [prt 0 fcall])
     E_Const constant -> prPrec i 8 (concatD [prt 0 constant])
     E_VarName id -> prPrec i 8 (concatD [prt 0 id])

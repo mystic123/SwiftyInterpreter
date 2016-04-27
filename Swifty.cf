@@ -9,6 +9,7 @@ Prog.    Program  ::= [Stmt] ;
 D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Stmt ;
 D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Stmt ;
 D_Var.	Decl		::= "var" Ident "=" Expr ;
+D_Str.	Decl		::= "struct" Ident ;
 D_MVar.  Decl     ::= "var" Ident "," [Ident] "=" Tuple ;
 
 P_Decl.  PDecl    ::= Ident ":" Type ;
@@ -16,17 +17,20 @@ P_Decl.  PDecl    ::= Ident ":" Type ;
 separator            PDecl  "," ;
 separator            Stmt   "" ;
 separator            Expr   "," ;
+separator	nonempty	Acc	 "," ;
 separator   nonempty Ident  "," ;
 separator   nonempty Type   "," ;
 
 B_Block.  Block ::= "{" [Stmt] "}" ;
 
+A_Iden.	 Acc	::= Ident ;
+A_Arr.	 Acc	::= Acc ArraySub ;
+A_Str.	 Acc  ::= Acc StructSub ;
+
 S_Block.	 Stmt ::= Block ;
 S_Decl.	 Stmt ::= Decl ;
-S_Assign. Stmt ::= Ident "=" Expr ;
-S_ArrAss. Stmt ::= Ident ArraySub "=" Expr ;
-S_StrAss. Stmt ::= Ident StructSub "=" Expr ;
-S_MAss.	 Stmt ::= Ident "," [Ident] "=" Tuple ;
+S_Assign. Stmt ::= Acc "=" Expr ;
+S_MAss.	 Stmt ::= Acc "," [Acc] "=" Tuple ;
 S_While.  Stmt ::= "while" "(" Expr ")" Stmt ;
 S_For.    Stmt ::= "for" Ident "in" Expr Stmt ;
 S_If.     Stmt ::= "if" "(" Expr ")" Stmt ;
@@ -53,8 +57,8 @@ E_Div.      Expr6  ::= Expr6 "/" Expr7 ;
 E_Min.      Expr7  ::= "-" Expr8 ;
 E_Neg.      Expr7  ::= "!" Expr8 ;
 E_ArrI.     Expr8  ::= Array ;
-E_ArrS.     Expr8  ::= Ident ArraySub ;
-E_StrS.     Expr8  ::= Ident StructSub ;
+E_ArrS.     Expr8  ::= Acc ArraySub ;
+E_StrS.     Expr8  ::= Acc StructSub ;
 E_FuncCall. Expr8  ::= FCall ;
 E_Const.    Expr8  ::= Constant ;
 E_VarName.  Expr8  ::= Ident ;

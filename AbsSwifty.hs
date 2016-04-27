@@ -15,6 +15,7 @@ data Decl
     = D_Fun Ident [PDecl] Type Stmt
     | D_Proc Ident [PDecl] Stmt
     | D_Var Ident Expr
+    | D_Str Ident
     | D_MVar Ident [Ident] Tuple
   deriving (Eq, Ord, Show, Read)
 
@@ -24,13 +25,14 @@ data PDecl = P_Decl Ident Type
 data Block = B_Block [Stmt]
   deriving (Eq, Ord, Show, Read)
 
+data Acc = A_Iden Ident | A_Arr Acc ArraySub | A_Str Acc StructSub
+  deriving (Eq, Ord, Show, Read)
+
 data Stmt
     = S_Block Block
     | S_Decl Decl
-    | S_Assign Ident Expr
-    | S_ArrAss Ident ArraySub Expr
-    | S_StrAss Ident StructSub Expr
-    | S_MAss Ident [Ident] Tuple
+    | S_Assign Acc Expr
+    | S_MAss Acc [Acc] Tuple
     | S_While Expr Stmt
     | S_For Ident Expr Stmt
     | S_If Expr Stmt
@@ -60,8 +62,8 @@ data Expr
     | E_Min Expr
     | E_Neg Expr
     | E_ArrI Array
-    | E_ArrS Ident ArraySub
-    | E_StrS Ident StructSub
+    | E_ArrS Acc ArraySub
+    | E_StrS Acc StructSub
     | E_FuncCall FCall
     | E_Const Constant
     | E_VarName Ident

@@ -20,6 +20,7 @@ transDecl x = case x of
   D_Fun ident pdecls type_ stmt -> failure x
   D_Proc ident pdecls stmt -> failure x
   D_Var ident expr -> failure x
+  D_Str ident -> failure x
   D_MVar ident idents tuple -> failure x
 transPDecl :: PDecl -> Result
 transPDecl x = case x of
@@ -27,14 +28,17 @@ transPDecl x = case x of
 transBlock :: Block -> Result
 transBlock x = case x of
   B_Block stmts -> failure x
+transAcc :: Acc -> Result
+transAcc x = case x of
+  A_Iden ident -> failure x
+  A_Arr acc arraysub -> failure x
+  A_Str acc structsub -> failure x
 transStmt :: Stmt -> Result
 transStmt x = case x of
   S_Block block -> failure x
   S_Decl decl -> failure x
-  S_Assign ident expr -> failure x
-  S_ArrAss ident arraysub expr -> failure x
-  S_StrAss ident structsub expr -> failure x
-  S_MAss ident idents tuple -> failure x
+  S_Assign acc expr -> failure x
+  S_MAss acc accs tuple -> failure x
   S_While expr stmt -> failure x
   S_For ident expr stmt -> failure x
   S_If expr stmt -> failure x
@@ -63,8 +67,8 @@ transExpr x = case x of
   E_Min expr -> failure x
   E_Neg expr -> failure x
   E_ArrI array -> failure x
-  E_ArrS ident arraysub -> failure x
-  E_StrS ident structsub -> failure x
+  E_ArrS acc arraysub -> failure x
+  E_StrS acc structsub -> failure x
   E_FuncCall fcall -> failure x
   E_Const constant -> failure x
   E_VarName ident -> failure x

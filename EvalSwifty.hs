@@ -10,7 +10,7 @@ import ErrM
 import Data.List
 import qualified Data.Map as M
 
-data ExprValue = I Integer | B Bool | A Type [Loc] | T [ExprValue] | S (M.Map Var Loc) | L [ExprValue]
+data ExprValue = I Integer | B Bool | A Type [Loc] | T [ExprValue] | S (M.Map Var Loc) | L [ExprValue] | Str (M.Map Var ExprValue) | None
 
 type Loc = Integer
 type Var = Ident
@@ -27,6 +27,7 @@ type ContD = Store -> Env -> Cont
 type ContB = Store -> Cont
 type ContR = ExprValue -> Cont
 type ContA = [ExprValue] -> Cont
+type ContL = Loc -> Cont
 
 instance Eq ExprValue where
    I a == I b     = a == b
@@ -60,8 +61,10 @@ instance Show ExprValue where
    show (B b)     = show b
    show (A t l)   = "A: {" ++ (intercalate "," $ map show l) ++ "}"
    show (T l)     = "T: (" ++ (intercalate "," $ map show l) ++ ")"
-   show (L l)     = "L: {" ++ (intercalate "," $ map show l) ++ "}"
+   show (L l)     = "{" ++ (intercalate "," $ map show l) ++ "}"
    show (S str)   = show $ M.toList str
+   show (Str s)   = show $ M.toList s
+   show None      = "None"
 
 -- HELPER FUNCTIONS
 exprDiv :: ExprValue -> ExprValue -> ExprValue
@@ -94,8 +97,11 @@ constM :: (Monad m) => a -> m (a)
 constM = return
 
 undefVar (Ident x) = error $ concat ["Undefined variable: ", show x]
-
 undefFunc (Ident f) = error $ concat ["Undefined function: ", show f]
+indexOutR = error "Index out of range"
+notArray = error "Not an array"
+notStruct = error "Not a struct"
+invStrEl (Ident x) = error $ concat ["Invalid struct element: ", show x]
 
 isRef :: PDecl -> Bool
 isRef (P_Decl _ (T_Ref _)) = True
@@ -117,9 +123,16 @@ getLocs2 (v:vs) s = case v of
                                     where
                                        (locs, s') = getLocs2 vals s
                                        l = newLoc s'
-                                       arr = A T_Int $ reverse locs
+                                       arr = A T_Int locs
                                        s'' = M.insert l arr s'
                                        (locs',s''') = getLocs2 vs s''
+                     (Str str) -> (l:locs', M.insert l str' s''')
+                                 where
+                                    (locs, s') = getLocs2 (M.elems str) s
+                                    l = newLoc s'
+                                    str' = S $ M.fromList $ zip (M.keys str) locs
+                                    s'' = M.insert l str' s'
+                                    (locs', s''') = getLocs2 vs s''
                      _ -> (l:locs, M.insert l v s')
                            where
                               (locs, s') = getLocs2 vs s
@@ -129,6 +142,15 @@ getType :: ExprValue -> Type
 getType (I _) = T_Int
 getType (B _) = T_Bool
 getType (A t _) = T_Arr t
+
+(!!!) :: [a] -> ExprValue -> a
+(!!!) l (I i) = let
+                  i' = fromInteger i
+                  ll = length l
+                in if i' < ll
+                     then (!!) l $ fromInteger i
+                     else indexOutR
+(!!!) _ x = (error $ "Not valid array index: " ++ show x)
 
 -- PROGRAM
 execProg :: Program -> IO ()
@@ -145,22 +167,48 @@ execProg (Prog p) = do
                                              kr' = (\n -> constM)
                                              k = execStmts x g k' kr'
 
+allocArray :: Loc -> [ExprValue] -> Env -> (Store -> Env -> Cont) -> Cont
+allocArray l vals g k s = let
+                     (locs, s') = getLocs2 vals s
+                     s'' = M.insert l (A T_Int locs) s'
+                    in k s'' g s''
+
+allocStruct :: Loc -> (M.Map Var ExprValue) -> Env -> (Store -> Env -> Cont) -> Cont
+allocStruct l str g k s = let
+                           (locs, s') = getLocs2 (M.elems str) s
+                           str' = M.fromList $ zip (M.keys str) locs
+                           s'' = M.insert l (S str') s'
+                          in k s'' g s''
+
 -- DECLARATIONS
 evalDecl :: Decl -> Env -> ContD -> Cont
 evalDecl (D_Var x e) g k = evalExpr e g k'
                               where
                                  k' :: ContE
                                  k' (L vals) s = let
-                                                   (locs, s') = getLocs2 vals s
-                                                   l = newLoc s'
-                                                   s'' = M.insert l (A T_Int $ reverse locs) s'
+                                                   l = newLoc s
                                                    g' = newVar x l g
-                                                 in k s'' g' s''
+                                                   s' = M.insert l None s
+                                                 in allocArray l vals g' k s'
+                                 k' (Str str) s = let
+                                                   l = newLoc s
+                                                   g' = newVar x l g
+                                                   s' = M.insert l None s
+                                                  in allocStruct l str g' k s'
                                  k' n s = let
                                              l = newLoc s
                                              g' = newVar x l g
                                              s' = M.insert l n s
                                           in k s' g' s'
+evalDecl (D_Str x) g k = k'
+                        where
+                           k' :: Cont
+                           k' s = let
+                                    l = newLoc s
+                                    s' = M.insert l (S M.empty) s
+                                    g' = newVar x l g
+                                  in k s' g' s'
+
 evalDecl (D_Fun foo pd rtype stmt) g k = k'
                                           where
                                           k' :: Cont
@@ -180,7 +228,7 @@ evalDecl (D_Proc proc pd stmt) g k = k'
 evalDecl (D_MVar x xs (Tup e es)) g k = evalExprList (x:xs) (e:es) [] g k
                                           where
                                              evalExprList :: [Var] -> [Expr] -> [ExprValue] -> Env -> ContD -> Cont
-                                             evalExprList x [] y g k = multVarDecl x (reverse y) g k
+                                             evalExprList x [] y g k = multVarDecl x y g k
                                              evalExprList x (e:es) y g k = evalExpr e g (\n -> evalExprList x es (n:y) g k)
                                              multVarDecl :: [Var] -> [ExprValue] -> Env -> ContD -> Cont
                                              multVarDecl x y g k s = let
@@ -195,18 +243,33 @@ execBlock (B_Block b) = execBlock' b
                               execBlock' [] g k kr = (\s -> k s s)
                               execBlock' (b:bs) g k kr = execStmt b g (\s' g' -> execBlock' bs g' k kr) kr
 
-assignVar :: Var -> ExprValue -> Env -> Store -> Store
-assignVar x n (gv,gf) s = M.insert l n s
-                     where
-                        l = fromMaybe (undefVar x) $ M.lookup x gv
-
-assignArr :: Var -> ExprValue -> ExprValue -> Env -> Store -> Store
-assignArr x i n (gv,gf) s = M.insert l n s
-                           where
-                              al = fromMaybe (undefVar x) $ M.lookup x gv
-                              (A _ arr) = fromMaybe (undefVar x) $ M.lookup al s
-                              (I i') = i
-                              l = (!!) arr $fromInteger i'
+accToLoc :: Acc -> Env -> ContL -> Cont
+accToLoc (A_Iden x) (gv,gf) k = k (fromMaybe (undefVar x) $ M.lookup x gv)
+accToLoc (A_Arr acc (Arr_Sub i)) g@(gv,gf) k = accToLoc acc g k'
+                                                where
+                                                   k' :: ContL
+                                                   k' l s = let
+                                                               v = fromMaybe indexOutR $ M.lookup l s
+                                                               v' = case v of
+                                                                     (A _ locs) -> locs
+                                                                     _ -> notArray
+                                                            in evalExpr i g (\i' -> k $ (!!!) v' i') s
+accToLoc (A_Str acc (Str_Sub x)) g@(gv,gf) k = accToLoc acc g k'
+                                                where
+                                                   k' :: ContL
+                                                   k' l s = let
+                                                               str = case fromMaybe notStruct $ M.lookup l s of
+                                                                        (S y) -> y
+                                                                        _ -> notStruct
+                                                               l' = M.lookup x str
+                                                            in case l' of
+                                                                  Just l'' -> k l'' s
+                                                                  Nothing -> let
+                                                                              l'' = newLoc s
+                                                                              s' = M.insert l'' None s
+                                                                              str' = M.insert x l'' str
+                                                                              s'' = M.insert l (S str') s'
+                                                                             in k l'' s''
 
 -- STATEMENTS
 execStmts :: [Stmt] -> Env -> ContS -> ContR -> Cont
@@ -219,14 +282,14 @@ execStmt (S_Decl d) g k kr = evalDecl d g (\s' g' -> k s' g')
 execStmt (S_Assign x e) g k kr = evalExpr e g k'
                                  where
                                     k' :: ContE
-                                    k' n s = let
-                                                s' = assignVar x n g s
-                                             in k s' g s'
-execStmt (S_ArrAss x (Arr_Sub i) e) g k kr = evalExpr i g (\n -> evalExpr e g (\m -> k' n m))
-                                             where
-                                                k' i n s = let
-                                                            s' = assignArr x i n g s
-                                                           in k s' g s'
+                                    k' n = accToLoc x g (\l -> k'' l n)
+                                    k'' l n s = case n of
+                                                (L vals) -> allocArray l vals g k s
+                                                (Str str) -> allocStruct l str g k s
+                                                _ -> let
+                                                      s' = M.insert l n s
+                                                     in k s' g s'
+execStmt (S_MAss x xs e) g k kr = error "Not implemented yet"
 execStmt w@(S_While e s) g k kr = evalExpr e g k'
                                  where
                                     k' :: ContE
@@ -261,25 +324,6 @@ execStmt (S_Print e) g k kr = evalExpr e g k'
                                              k s g s
 execStmt (S_Expr e) g k kr = evalExpr (E_FuncCall e) g (\_ -> constM)
 
-{-
-execAssign :: ExprValue -> Acc -> Env -> ContS -> ContR -> Cont
-execAssign n (A_Iden x) g k kr s = k $ M.insert (getLoc x) n s
-execAssign n (A_Arr a (Arr_Sub e)) = evalExpr e g (\(I n') -> 
-
-
---modifyArray :: ExprValue -> Acc -> ExprValue
-modifyArray arr i val = modifyArray' [] arr i val
-                        where
-                           --modifyArray' :: ExprValue -> ExprValue -> Acc -> ExprValue
-                           modifyArray' r (A_Iden x) i val g s = fromMaybe (undefVar x) $ M.looku
-                           modifyArray' r (A _ vals) (A_Arr a (Arr_Sub e))
-
-
-evalAcc acc g k = evalAcc' [] acc g k
-                  where
-                     evalAcc' (A_Iden x) 
-                     evalAcc' es (A_Arr x e) = evalAcc' (e:es) x
--}
 execFor :: Var -> Expr -> Stmt -> Env -> ContS -> ContR -> Cont
 execFor x e stmt g k kr = evalExpr e g (\(A _ arr) -> execFor' x arr stmt g k kr)
                            where
@@ -307,16 +351,16 @@ callFunc (a:as) (p:ps) locs@(l:ls) stmt g@(gv,gf) k
                                                                      k' n s = callFunc as ps ls stmt (gv'', gf) (\n -> k n) $ M.insert l n s
 
 evalExprList :: [Expr] -> Env -> ContA -> Cont
-evalExprList l g k = evalExprList' l [] g k
-                     where
-                        evalExprList' [] v g k = k $ reverse v
-                        evalExprList' (e:es) v g k = evalExpr e g (\n -> evalExprList' es (n:v) g k)
+evalExprList = evalExprList' []
+                  where
+                     evalExprList' v [] g k = k $ reverse v
+                     evalExprList' v (e:es) g k = evalExpr e g (\n -> evalExprList' (n:v) es g k)
 
 evalTuple :: [Expr] -> Env -> ContE -> Cont
-evalTuple l g k = evalExprList l g (\vals -> k $ L $ reverse vals)
+evalTuple l g k = evalExprList l g (\vals -> k $ T vals)
 
 evalArray :: [Expr] -> Env -> ContE -> Cont
-evalArray l g k = evalExprList l g (\vals -> k $ L $ reverse vals)
+evalArray l g k = evalExprList l g (\vals -> k $ L vals)
 
 evalExpr :: Expr -> Env -> ContE -> Cont
 evalExpr (E_TupI (Tup e es)) g k = evalTuple (e:es) g k
@@ -354,25 +398,52 @@ evalExpr (E_VarName x) (gv, gf) k = (\s -> let
                                        n = fromMaybe (undefVar x) $ M.lookup l s
                                        v = case n of
                                              A _ locs -> getArray locs s
+                                             S str -> getStruct str s
                                              _ -> n
                                     in k v s)
 evalExpr (E_FuncCall (Fun_Call foo args)) g k = callFunc args pd l stmt g k
                                                 where
                                                    (pd, l, stmt) = fromMaybe (undefFunc foo) $ M.lookup foo $ snd g
---evalExpr (E_ArrS e (Arr_Sub i)) g k = evalExpr e g (\(A _ v) -> evalExpr i g (\(I i) -> k $ (!!) v $ fromInteger i))
+evalExpr (E_ArrS acc (Arr_Sub i)) g k = evalExpr i g k'
+                                       where
+                                          k' :: ContE
+                                          k' n = accToLoc acc g (\l -> k'' l n)
+                                          k'' l n s = let
+                                                         l' = fromMaybe indexOutR $ M.lookup l s
+                                                         arr = case l' of
+                                                               (A _ arr') -> arr'
+                                                               _ -> notArray
+                                                         v = fromJust $ M.lookup ((!!!) arr n) s
+                                                      in k v s
+
+locToExprVal :: Store -> Loc -> ExprValue
+locToExprVal s l = case val of
+                     (A _ arr) -> getArray arr s
+                     (S str) -> getStruct str s
+                     x -> x
+                  where
+                     val = fromMaybe (error "empty location") $ M.lookup l s
 
 getArray :: [Loc] -> Store -> ExprValue
-getArray locs s = getArray' [] locs s
-                  where
-                     getArray' :: [ExprValue] -> [Loc] -> Store -> ExprValue
-                     getArray' r [] _ = L $ reverse r
-                     getArray' r (l:ls) s = case l' of
-                                             A _ locs' -> let
-                                                            arr = getArray locs' s
-                                                          in getArray' (arr:r) ls s
-                                             _ -> getArray' (l':r) ls s
-                                             where
-                                                Just l' = M.lookup l s
+getArray locs = getArray' [] $ reverse locs
+            where
+               getArray' :: [ExprValue] -> [Loc] -> Store -> ExprValue
+               getArray' r [] _ = L r
+               getArray' r (l:ls) s = case l' of
+                                       A _ locs' -> let
+                                                      arr = getArray locs' s
+                                                    in getArray' (r ++ [arr]) ls s
+                                       _ -> getArray' (l':r) ls s
+                                       where
+                                          Just l' = M.lookup l s
+
+getStruct :: (M.Map Var Loc) -> Store -> ExprValue
+getStruct = getStruct' M.empty
+            where
+               getStruct' :: (M.Map Var ExprValue) -> (M.Map Var Loc) -> Store -> ExprValue
+               getStruct' r str s = let
+                                       str' = M.map (locToExprVal s) str
+                                    in (Str $ M.union r str')
 
 evalComp :: (ExprValue -> ExprValue -> Bool) -> Expr -> Expr -> Env -> ContE -> Cont
 evalComp f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ B $ f v1 v2))
