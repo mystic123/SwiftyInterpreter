@@ -132,32 +132,6 @@ instance Print FCall where
   prt i e = case e of
     Fun_Call id exprs -> prPrec i 0 (concatD [prt 0 id, doc (showString "("), prt 0 exprs, doc (showString ")")])
 
-instance Print Expr where
-  prt i e = case e of
-    E_TupI tuple -> prPrec i 0 (concatD [prt 0 tuple])
-    E_Or expr1 expr2 -> prPrec i 1 (concatD [prt 1 expr1, doc (showString "||"), prt 2 expr2])
-    E_And expr1 expr2 -> prPrec i 2 (concatD [prt 2 expr1, doc (showString "&&"), prt 3 expr2])
-    E_Eq expr1 expr2 -> prPrec i 3 (concatD [prt 3 expr1, doc (showString "=="), prt 4 expr2])
-    E_Neq expr1 expr2 -> prPrec i 3 (concatD [prt 3 expr1, doc (showString "!="), prt 4 expr2])
-    E_Lt expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString "<"), prt 5 expr2])
-    E_Gt expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString ">"), prt 5 expr2])
-    E_Lte expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString "<="), prt 5 expr2])
-    E_Gte expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString ">="), prt 5 expr2])
-    E_Add expr1 expr2 -> prPrec i 5 (concatD [prt 5 expr1, doc (showString "+"), prt 6 expr2])
-    E_Subt expr1 expr2 -> prPrec i 5 (concatD [prt 5 expr1, doc (showString "-"), prt 6 expr2])
-    E_Mult expr1 expr2 -> prPrec i 6 (concatD [prt 6 expr1, doc (showString "*"), prt 7 expr2])
-    E_Div expr1 expr2 -> prPrec i 6 (concatD [prt 6 expr1, doc (showString "/"), prt 7 expr2])
-    E_Min expr -> prPrec i 7 (concatD [doc (showString "-"), prt 8 expr])
-    E_Neg expr -> prPrec i 7 (concatD [doc (showString "!"), prt 8 expr])
-    E_ArrI array -> prPrec i 8 (concatD [prt 0 array])
-    E_ArrS acc arraysub -> prPrec i 8 (concatD [prt 0 acc, prt 0 arraysub])
-    E_StrS acc structsub -> prPrec i 8 (concatD [prt 0 acc, prt 0 structsub])
-    E_FuncCall fcall -> prPrec i 8 (concatD [prt 0 fcall])
-    E_Const constant -> prPrec i 8 (concatD [prt 0 constant])
-    E_VarName id -> prPrec i 8 (concatD [prt 0 id])
-  prtList _ [] = (concatD [])
-  prtList _ [x] = (concatD [prt 0 x])
-  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print ArraySub where
   prt i e = case e of
     Arr_Sub expr -> prPrec i 0 (concatD [doc (showString "["), prt 0 expr, doc (showString "]")])
@@ -174,6 +148,32 @@ instance Print StructSub where
   prt i e = case e of
     Str_Sub id -> prPrec i 0 (concatD [doc (showString "."), prt 0 id])
 
+instance Print Expr where
+  prt i e = case e of
+    E_Or expr1 expr2 -> prPrec i 1 (concatD [prt 1 expr1, doc (showString "||"), prt 2 expr2])
+    E_And expr1 expr2 -> prPrec i 2 (concatD [prt 2 expr1, doc (showString "&&"), prt 3 expr2])
+    E_Eq expr1 expr2 -> prPrec i 3 (concatD [prt 3 expr1, doc (showString "=="), prt 4 expr2])
+    E_Neq expr1 expr2 -> prPrec i 3 (concatD [prt 3 expr1, doc (showString "!="), prt 4 expr2])
+    E_Lt expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString "<"), prt 5 expr2])
+    E_Gt expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString ">"), prt 5 expr2])
+    E_Lte expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString "<="), prt 5 expr2])
+    E_Gte expr1 expr2 -> prPrec i 4 (concatD [prt 4 expr1, doc (showString ">="), prt 5 expr2])
+    E_Add expr1 expr2 -> prPrec i 5 (concatD [prt 5 expr1, doc (showString "+"), prt 6 expr2])
+    E_Subt expr1 expr2 -> prPrec i 5 (concatD [prt 5 expr1, doc (showString "-"), prt 6 expr2])
+    E_Mult expr1 expr2 -> prPrec i 6 (concatD [prt 6 expr1, doc (showString "*"), prt 7 expr2])
+    E_Div expr1 expr2 -> prPrec i 6 (concatD [prt 6 expr1, doc (showString "/"), prt 7 expr2])
+    E_Min expr -> prPrec i 7 (concatD [doc (showString "-"), prt 8 expr])
+    E_Neg expr -> prPrec i 7 (concatD [doc (showString "!"), prt 8 expr])
+    E_ArrI array -> prPrec i 8 (concatD [prt 0 array])
+    E_TupI tuple -> prPrec i 8 (concatD [prt 0 tuple])
+    E_ArrS acc arraysub -> prPrec i 8 (concatD [prt 0 acc, prt 0 arraysub])
+    E_StrS acc structsub -> prPrec i 8 (concatD [prt 0 acc, prt 0 structsub])
+    E_FuncCall fcall -> prPrec i 8 (concatD [prt 0 fcall])
+    E_Const constant -> prPrec i 8 (concatD [prt 0 constant])
+    E_VarName id -> prPrec i 8 (concatD [prt 0 id])
+  prtList _ [] = (concatD [])
+  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print Constant where
   prt i e = case e of
     False_Const -> prPrec i 0 (concatD [doc (showString "false")])
@@ -187,6 +187,8 @@ instance Print Type where
     T_Arr type_ -> prPrec i 0 (concatD [doc (showString "Array"), doc (showString "of"), prt 0 type_])
     T_Tup types -> prPrec i 0 (concatD [doc (showString "("), prt 0 types, doc (showString ")")])
     T_Ref type_ -> prPrec i 0 (concatD [doc (showString "&"), prt 0 type_])
+    T_Void -> prPrec i 0 (concatD [doc (showString "void")])
+    T_Str -> prPrec i 0 (concatD [doc (showString "struct")])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 

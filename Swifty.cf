@@ -41,7 +41,6 @@ S_Expr.   Stmt ::= FCall ;
 
 Fun_Call.   FCall ::= Ident "(" [Expr] ")" ;
 
-E_TupI.     Expr   ::= Tuple ;
 E_Or.       Expr1  ::= Expr1 "||" Expr2 ;
 E_And.      Expr2  ::= Expr2 "&&" Expr3 ;
 E_Eq.       Expr3  ::= Expr3 "==" Expr4 ;
@@ -57,6 +56,7 @@ E_Div.      Expr6  ::= Expr6 "/" Expr7 ;
 E_Min.      Expr7  ::= "-" Expr8 ;
 E_Neg.      Expr7  ::= "!" Expr8 ;
 E_ArrI.     Expr8  ::= Array ;
+E_TupI.     Expr8  ::= Tuple ;
 E_ArrS.     Expr8  ::= Acc ArraySub ;
 E_StrS.     Expr8  ::= Acc StructSub ;
 E_FuncCall. Expr8  ::= FCall ;
@@ -79,3 +79,5 @@ T_Bool.  Type  ::= "bool" ;
 T_Arr.   Type  ::= "Array" "of" Type ;
 T_Tup.   Type  ::= "(" [Type] ")" ;
 T_Ref.   Type  ::= "&" Type;
+internal T_Void.	Type	::= "void" ;
+internal T_Str.	Type	::= "struct" ;

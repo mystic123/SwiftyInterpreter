@@ -12,6 +12,7 @@ import PrintSwifty
 import AbsSwifty
 import EvalSwifty
 import ErrM
+import TypeChecker
 
 type ParseFun a = [Token] -> Err a
 
@@ -30,6 +31,7 @@ run p s = let ts = myLLexer s in
                                  exitFailure
                   Ok tree  -> do putStrLn "\nParse Successful!"
                                  showTree tree
+                                 checkProg tree
                                  execProg tree
                                  exitSuccess
 

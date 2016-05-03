@@ -1,35 +1,30 @@
-/*struct x
-x.z = 5
-x.a = 10
+func f(a:&int, b:&bool) -> int {
+	func g(x:&int) -> bool {
+		a = 666
+		return x > 1 
+	}
+	print a
+	print b
+	a = 10
+	b = g(a)
+	while (true) {
+		return 666
+	}
+}
 
-struct y
-y.a = 10
-y.b = 20
+var x = 5
+var y = true
 
-x.c = y
+var arr = {1,2,3}
 
-print 4*/
-var a = {111,222,333}
-var b = {44}
-var c = {{1,2},{3,4},{5,6}}
-print 1
+func ff(k:Array of int) -> Array of int {
+	k[0] = 666
+	return {5,6,7}
+}
+var arr2 = {{1}}
 
-b = a
-print a
-print b
-print c
+struct s
+s.a = {1,2,3}
 
-/*
-print 5
-print x
-
-var z = x
-print 6
-
-var a = {1,2,3}
-var b = {55}
-
-b = a
-
-print 1
-*/
+ff(s.a)
+print f(x,y)

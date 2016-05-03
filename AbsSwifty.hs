@@ -45,9 +45,20 @@ data Stmt
 data FCall = Fun_Call Ident [Expr]
   deriving (Eq, Ord, Show, Read)
 
+data ArraySub = Arr_Sub Expr
+  deriving (Eq, Ord, Show, Read)
+
+data Array = Arr [Expr]
+  deriving (Eq, Ord, Show, Read)
+
+data Tuple = Tup Expr [Expr]
+  deriving (Eq, Ord, Show, Read)
+
+data StructSub = Str_Sub Ident
+  deriving (Eq, Ord, Show, Read)
+
 data Expr
-    = E_TupI Tuple
-    | E_Or Expr Expr
+    = E_Or Expr Expr
     | E_And Expr Expr
     | E_Eq Expr Expr
     | E_Neq Expr Expr
@@ -62,6 +73,7 @@ data Expr
     | E_Min Expr
     | E_Neg Expr
     | E_ArrI Array
+    | E_TupI Tuple
     | E_ArrS Acc ArraySub
     | E_StrS Acc StructSub
     | E_FuncCall FCall
@@ -69,21 +81,16 @@ data Expr
     | E_VarName Ident
   deriving (Eq, Ord, Show, Read)
 
-data ArraySub = Arr_Sub Expr
-  deriving (Eq, Ord, Show, Read)
-
-data Array = Arr [Expr]
-  deriving (Eq, Ord, Show, Read)
-
-data Tuple = Tup Expr [Expr]
-  deriving (Eq, Ord, Show, Read)
-
-data StructSub = Str_Sub Ident
-  deriving (Eq, Ord, Show, Read)
-
 data Constant = False_Const | True_Const | Integer_Const Integer
   deriving (Eq, Ord, Show, Read)
 
-data Type = T_Int | T_Bool | T_Arr Type | T_Tup [Type] | T_Ref Type
+data Type
+    = T_Int
+    | T_Bool
+    | T_Arr Type
+    | T_Tup [Type]
+    | T_Ref Type
+    | T_Void
+    | T_Str
   deriving (Eq, Ord, Show, Read)
 

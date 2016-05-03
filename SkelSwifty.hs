@@ -49,9 +49,20 @@ transStmt x = case x of
 transFCall :: FCall -> Result
 transFCall x = case x of
   Fun_Call ident exprs -> failure x
+transArraySub :: ArraySub -> Result
+transArraySub x = case x of
+  Arr_Sub expr -> failure x
+transArray :: Array -> Result
+transArray x = case x of
+  Arr exprs -> failure x
+transTuple :: Tuple -> Result
+transTuple x = case x of
+  Tup expr exprs -> failure x
+transStructSub :: StructSub -> Result
+transStructSub x = case x of
+  Str_Sub ident -> failure x
 transExpr :: Expr -> Result
 transExpr x = case x of
-  E_TupI tuple -> failure x
   E_Or expr1 expr2 -> failure x
   E_And expr1 expr2 -> failure x
   E_Eq expr1 expr2 -> failure x
@@ -67,23 +78,12 @@ transExpr x = case x of
   E_Min expr -> failure x
   E_Neg expr -> failure x
   E_ArrI array -> failure x
+  E_TupI tuple -> failure x
   E_ArrS acc arraysub -> failure x
   E_StrS acc structsub -> failure x
   E_FuncCall fcall -> failure x
   E_Const constant -> failure x
   E_VarName ident -> failure x
-transArraySub :: ArraySub -> Result
-transArraySub x = case x of
-  Arr_Sub expr -> failure x
-transArray :: Array -> Result
-transArray x = case x of
-  Arr exprs -> failure x
-transTuple :: Tuple -> Result
-transTuple x = case x of
-  Tup expr exprs -> failure x
-transStructSub :: StructSub -> Result
-transStructSub x = case x of
-  Str_Sub ident -> failure x
 transConstant :: Constant -> Result
 transConstant x = case x of
   False_Const -> failure x
@@ -96,4 +96,6 @@ transType x = case x of
   T_Arr type_ -> failure x
   T_Tup types -> failure x
   T_Ref type_ -> failure x
+  T_Void -> failure x
+  T_Str -> failure x
 
