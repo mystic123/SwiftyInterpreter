@@ -29,8 +29,8 @@ run p s = let ts = myLLexer s in
                                  putStrLn $ show ts
                                  putStrLn s
                                  exitFailure
-                  Ok tree  -> do putStrLn "\nParse Successful!"
-                                 showTree tree
+                  Ok tree  -> do --putStrLn "\nParse Successful!"
+                                 --showTree tree
                                  checkProg tree
                                  execProg tree
                                  exitSuccess

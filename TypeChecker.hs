@@ -8,6 +8,7 @@ import Data.Maybe
 import AbsSwifty
 import ErrM
 import qualified Data.Map as M
+import qualified Data.Set as St
 import Data.Maybe
 import Data.List
 import Control.Monad.State as S
@@ -16,7 +17,8 @@ type Var = Ident
 type FName = Ident
 type EnvV = M.Map Var TCType
 type EnvF = M.Map FName (TCType, [(Var, TCType)], Stmt)
-type Env = (EnvV,EnvF)
+type CheckedFun = St.Set Var
+type Env = (EnvV,EnvF,CheckedFun)
 
 data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType | None deriving (Eq, Ord)
 
@@ -51,15 +53,17 @@ notIterable x = error $ "Type error: Not iterable: " ++ (show x)
 arrayElemsError = error "Type error: Array elements must be of same type"
 invRetType = error "Type error: Type of return value does not match function's return type"
 refTypeError = error "Type error: Expected type, found reference"
+errorMultAssign l1 l2 = error $ concat ["Error in multiple assign: ", "Expected: ", show l1 , " values, found: ", show l2]
+errorProcAssign = error "Type error: Fuction does not return any value"
 
-emptyEnv = (M.empty, M.empty)
+emptyEnv = (M.empty, M.empty, St.empty)
 
 -- PROGRAM
 checkProg :: Program -> IO ()
 checkProg (Prog p) = checkProg' p emptyEnv
                         where
                            checkProg' [] env = do
-                                                mapM_ (putStrLn . show) (M.toList $ fst env)
+                                                --mapM_ (putStrLn . show) (M.toList $ fst env)
                                                 return ()
                            checkProg' (s:ss) env = do
                                                       env' <- execStateT (checkStmt s) env
@@ -69,20 +73,26 @@ checkProg (Prog p) = checkProg' p emptyEnv
 checkDecl :: MonadState Env m => Decl -> m TCType
 checkDecl (D_Var x e) = do
                            t <- checkExpr e
-                           modify (\(ev,ef) -> (M.insert x t ev,ef))
-                           return None
+                           if t /= T T_Void
+                              then modify (\(ev,ef,f) -> (M.insert x t ev,ef,f)) >> return None
+                              else errorProcAssign
 checkDecl (D_Fun x pd t s) = do
-                              modify (\(ev,ef) -> (ev, M.insert x (toTCType t,getParams pd,s) ef))
+                              (ev,ef,fs) <- get
+                              put $ (ev, M.insert x (toTCType t, getParams pd, s) ef, St.delete x fs)
                               return None
 checkDecl (D_Proc x pd s) = do
-                              modify (\(ev,ef) -> (ev, M.insert x (T T_Void, getParams pd,s) ef))
+                              (ev,ef,fs) <- get
+                              put $ (ev, M.insert x (T T_Void, getParams pd, s) ef, St.delete x fs)
                               return None
 checkDecl (D_Str x) = do
-                        modify (\(ev,ef) -> (M.insert x (S M.empty) ev,ef))
+                        modify (\(ev,ef,f) -> (M.insert x (S M.empty) ev,ef,f))
                         return None
 checkDecl (D_MVar x xs (Tup e es)) = do
-                                       mapM (\(x',e') -> checkDecl (D_Var x' e')) $ zip (x:xs) (e:es)
-                                       return None
+                                       let l1 = length (x:xs)
+                                       let l2 = length (e:es)
+                                       if l1 == l2
+                                          then (mapM (\(x',e') -> checkDecl (D_Var x' e')) $ zip (x:xs) (e:es)) >> return None
+                                          else errorMultAssign l1 l2
 
 toTCType :: Type -> TCType
 toTCType t = let
@@ -126,8 +136,11 @@ checkStmt (S_Assign acc e) = do
                                        then return None
                                        else errorExpected2 t1 t2
 checkStmt (S_MAss a as (Tup e es)) = do
-                                       mapM (\(a',e') -> checkStmt (S_Assign a' e')) $ zip (a:as) (e:es)
-                                       return None
+                                       let l1 = length (a:as)
+                                       let l2 = length (e:es)
+                                       if l1 == l2
+                                          then (mapM (\(a',e') -> checkStmt (S_Assign a' e')) $ zip (a:as) (e:es)) >> return None
+                                          else errorMultAssign l1 l2
 checkStmt (S_While e s) = do
                            t <- checkExpr e
                            if t == T T_Bool
@@ -135,10 +148,10 @@ checkStmt (S_While e s) = do
                               else errorExpected2 T_Bool t
 checkStmt (S_For x e s) = do
                            t <- checkExpr e
-                           env@(ev,ef) <- get
+                           env@(ev,ef,f) <- get
                            case t of
                               A t' -> do
-                                       modify (\(ev',ef') -> (M.insert x t' ev', ef'))
+                                       modify (\(ev',ef',f') -> (M.insert x t' ev', ef', f'))
                                        checkStmt s
                                        put env
                                        return None
@@ -170,17 +183,21 @@ checkFuncParams exprs = mapM checkExpr' exprs >>= return
 checkFunCall :: MonadState Env m => FCall -> m TCType
 checkFunCall (Fun_Call x exprs) = do
                                     args <- checkFuncParams exprs
-                                    env@(ev,ef) <- get
+                                    env@(ev,ef,fs) <- get
                                     let (t,parTyp,s) = fromMaybe (undefFunc x) $ M.lookup x ef
                                     let params = map snd parTyp
                                     if paramsMatch args params
-                                       then do
-                                             mapM (\(x',t') -> modify (\(ev,ef) -> (M.insert x' (fromRef t') ev, ef))) parTyp
-                                             rt <- checkStmt s
-                                             put env
-                                             if rt /= t
-                                                then invRetType
-                                                else return rt
+                                       then if St.member x fs
+                                                then return t
+                                                else do
+                                                   let fs' = St.insert x fs
+                                                   put (ev,ef,fs')
+                                                   mapM (\(x',t') -> modify (\(ev,ef,fs) -> (M.insert x' (fromRef t') ev, ef,fs))) parTyp
+                                                   rt <- checkStmt s
+                                                   put (ev,ef,fs')
+                                                   if rt /= t
+                                                      then invRetType
+                                                      else return rt
                                        else argsNoMatch params args
                                           where
                                              fromRef :: TCType -> TCType
@@ -191,7 +208,9 @@ checkFunCall (Fun_Call x exprs) = do
                                              paramsMatch args params = let
                                                                         l = zip args params
                                                                         f = (\(x,y) -> (x == y) || (fromRef x == y))
-                                                                       in and $ map f l
+                                                                       in if length args == length params
+                                                                           then and $ map f l
+                                                                           else argsNoMatch params args
 
 updateStrType :: MonadState Env m => Acc -> TCType -> m TCType
 updateStrType acc t = do
@@ -199,12 +218,12 @@ updateStrType acc t = do
                         return None
                            where
                               updateStrType' (A_Iden x) _ = do
-                                                               (ev,ef) <- get
+                                                               (ev,ef,_) <- get
                                                                return (fromMaybe (undefVar x) $ M.lookup x ev, x)
                               updateStrType' (A_Str acc (Str_Sub y)) t = do
                                                                            (S str',x) <- updateStrType' acc t
                                                                            let str'' = M.insert y t str'
-                                                                           modify (\(ev,ef) -> (M.insert x (S str'') ev, ef))
+                                                                           modify (\(ev,ef,fs) -> (M.insert x (S str'') ev, ef,fs))
                                                                            return (S str'', y)
 
 -- EXPRESSIONS
@@ -241,7 +260,7 @@ checkExpr e@(E_Const c) = inferType e
 
 getAccType :: MonadState Env m => Acc -> m TCType
 getAccType (A_Iden x) = do
-                           (ev,ef) <- get
+                           (ev,ef,_) <- get
                            case M.lookup x ev of
                               Just t' -> return t'
                               Nothing -> undefVar x
@@ -268,7 +287,7 @@ checkArrayInit (Arr exps) = do
 checkArraySub :: MonadState Env m => Acc -> ArraySub -> m TCType
 checkArraySub (A_Iden x) sub = do
                                  _ <- checkArrSub sub
-                                 (ev,ef) <- get
+                                 (ev,ef,_) <- get
                                  let t = M.lookup x ev
                                  if isNothing t
                                     then undefVar x
@@ -289,7 +308,7 @@ checkArrSub (Arr_Sub e) = do
 
 checkStructSub :: MonadState Env m => Acc -> StructSub -> m TCType
 checkStructSub (A_Iden x) (Str_Sub y) = do
-                                          (ev,ef) <- get
+                                          (ev,ef,_) <- get
                                           let t = M.lookup x ev
                                           if isNothing t
                                              then undefVar x
@@ -324,7 +343,7 @@ checkEq e1 e2 = do
                      t1 <- checkExpr e1
                      t2 <- checkExpr e2
                      if t1 == t2
-                        then return t1
+                        then return $ T T_Bool
                         else errorExpected t1 t1 t1 t2
 
 checkArithm :: MonadState Env m => Expr -> Expr -> m TCType
@@ -349,12 +368,12 @@ inferType (E_Const c) = return $ case c of
                                  True_Const -> T T_Bool
                                  Integer_Const _ -> T T_Int
 inferType (E_VarName x) = do
-                           (ev,ef) <- get
+                           (ev,ef,_) <- get
                            let t = M.lookup x ev
                            if isJust t
                               then return $ fromJust t
                               else undefVar x
 inferType (E_FuncCall (Fun_Call f exprs)) = do
-                                             (ev,ef) <- get
+                                             (ev,ef,_) <- get
                                              let (t,_,_) = fromMaybe (undefFunc f) $ M.lookup f ef
                                              return t
