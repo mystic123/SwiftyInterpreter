@@ -25,7 +25,6 @@ data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType 
 instance Show TCType where
    show (T T_Int) = "Int"
    show (T T_Bool) = "Bool"
-   show (T T_Void) = "Void"
    show (T _) = "kupa"
    show (R t) = "&" ++ show t
    show (S m) = concat ["Struct {", desc, "}"]
@@ -44,12 +43,13 @@ undefVar (Ident x) = error $ "Name error: Undefined variable: " ++ (show x)
 undefFunc (Ident f) = error $ "Name error: Undefined function: " ++ (show f)
 notArray = error $ "Type error: Not an array"
 notStruct = error $ "Type error: Not a struct"
+undefStructEl x = error $ "Name error: Undefined struct element: " ++ (show x)
 notValidArrSub x = error $ "Type error: Not valid array subscript: " ++ (show x)
 argsNoMatch l1 l2 = let
                         l1' = concat $ ["[",intercalate "," (map show l1),"]"]
                         l2' = concat $ ["[",intercalate "," (map show l2),"]"]
                     in error $ concat ["Type error: Mismatched function parameters. Expected: ",l1', ", found: ", l2']
-notIterable x = error $ "Type error: Not iterable: " ++ (show x)
+notIterable = error $ "Type error: Not iterable"
 arrayElemsError = error "Type error: Array elements must be of same type"
 invRetType = error "Type error: Type of return value does not match function's return type"
 refTypeError = error "Type error: Expected type, found reference"
@@ -73,7 +73,7 @@ checkProg (Prog p) = checkProg' p emptyEnv
 checkDecl :: MonadState Env m => Decl -> m TCType
 checkDecl (D_Var x e) = do
                            t <- checkExpr e
-                           if t /= T T_Void
+                           if t /= None
                               then modify (\(ev,ef,f) -> (M.insert x t ev,ef,f)) >> return None
                               else errorProcAssign
 checkDecl (D_Fun x pd t s) = do
@@ -82,7 +82,7 @@ checkDecl (D_Fun x pd t s) = do
                               return None
 checkDecl (D_Proc x pd s) = do
                               (ev,ef,fs) <- get
-                              put $ (ev, M.insert x (T T_Void, getParams pd, s) ef, St.delete x fs)
+                              put $ (ev, M.insert x (None, getParams pd, s) ef, St.delete x fs)
                               return None
 checkDecl (D_Str x) = do
                         modify (\(ev,ef,f) -> (M.insert x (S M.empty) ev,ef,f))
@@ -146,16 +146,16 @@ checkStmt (S_While e s) = do
                            if t == T T_Bool
                               then checkStmt s
                               else errorExpected2 T_Bool t
-checkStmt (S_For x e s) = do
-                           t <- checkExpr e
-                           env@(ev,ef,f) <- get
-                           case t of
-                              A t' -> do
-                                       modify (\(ev',ef',f') -> (M.insert x t' ev', ef', f'))
-                                       checkStmt s
-                                       put env
-                                       return None
-                              _ -> notIterable e
+checkStmt (S_For x acc s) = do
+                              t <- getAccType acc
+                              env@(ev,ef,f) <- get
+                              case t of
+                                 A t' -> do
+                                          modify (\(ev',ef',f') -> (M.insert x t' ev', ef', f'))
+                                          checkStmt s
+                                          put env
+                                          return None
+                                 _ -> notIterable
 checkStmt (S_If e s) = do
                         t <- checkExpr e
                         case t of
@@ -251,29 +251,44 @@ checkExpr (E_Neg e) = do
                            then return $ T T_Bool
                            else errorExpected2 (T T_Bool) e
 checkExpr (E_ArrI arr) = checkArrayInit arr
+checkExpr (E_ArrI2 s e) = do
+                           ts <- checkExpr s
+                           te <- checkExpr e
+                           if ts == T T_Int
+                              then return $ A te
+                              else errorExpected2 (T T_Int) ts
 checkExpr (E_TupI tup) = checkTupleInit tup
-checkExpr (E_ArrS arr sub) = checkArraySub arr sub
-checkExpr (E_StrS str sub) = checkStructSub str sub
+checkExpr (E_ArrS arr sub) = do
+                              _ <- checkArrSub sub
+                              getAccType (A_Arr arr sub)
+checkExpr (E_StrS str sub) = getAccType (A_Str str sub)
 checkExpr e@(E_FuncCall fc) = checkFunCall fc >> inferType e
 checkExpr e@(E_VarName x) = inferType e
 checkExpr e@(E_Const c) = inferType e
 
 getAccType :: MonadState Env m => Acc -> m TCType
 getAccType (A_Iden x) = do
-                           (ev,ef,_) <- get
+                           (ev,_,_) <- get
                            case M.lookup x ev of
-                              Just t' -> return t'
+                              Just t -> return t
                               Nothing -> undefVar x
 getAccType (A_Arr acc _) = do
                               t <- getAccType acc
                               case t of
-                                 (A t') -> return t'
+                                 A t' -> return t'
                                  _ -> notArray
 getAccType (A_Str acc (Str_Sub x)) = do
                                        t <- getAccType acc
                                        case t of
-                                          S m -> return $ fromMaybe None $ M.lookup x m
+                                          S m -> return $ fromMaybe (undefStructEl x) $ M.lookup x m
                                           _ -> notStruct
+
+checkArrSub :: MonadState Env m => ArraySub -> m TCType
+checkArrSub (Arr_Sub e) = do
+                           t <- checkExpr e
+                           if t == T T_Int
+                              then return $ T T_Int
+                              else notValidArrSub e
 
 checkArrayInit :: MonadState Env m => Array -> m TCType
 checkArrayInit (Arr exps) = do
@@ -283,47 +298,6 @@ checkArrayInit (Arr exps) = do
                               if allEq
                                  then return $ A t0
                                  else arrayElemsError
-
-checkArraySub :: MonadState Env m => Acc -> ArraySub -> m TCType
-checkArraySub (A_Iden x) sub = do
-                                 _ <- checkArrSub sub
-                                 (ev,ef,_) <- get
-                                 let t = M.lookup x ev
-                                 if isNothing t
-                                    then undefVar x
-                                    else case fromJust t of
-                                             A t -> return t
-                                             _ -> notArray
-checkArraySub (A_Arr acc sub) sub' = do
-                                       _ <- checkArrSub sub'
-                                       t <- checkArraySub acc sub
-                                       return t
-
-checkArrSub :: MonadState Env m => ArraySub -> m TCType
-checkArrSub (Arr_Sub e) = do
-                           t <- checkExpr e
-                           if t == T T_Int
-                              then return $ T T_Int
-                              else notValidArrSub e
-
-checkStructSub :: MonadState Env m => Acc -> StructSub -> m TCType
-checkStructSub (A_Iden x) (Str_Sub y) = do
-                                          (ev,ef,_) <- get
-                                          let t = M.lookup x ev
-                                          if isNothing t
-                                             then undefVar x
-                                             else case fromJust t of
-                                                      S m -> case M.lookup y m of
-                                                               Just t' -> return t'
-                                                               _ -> notStruct
-                                                      _ -> notStruct
-checkStructSub (A_Str str sub) (Str_Sub y) = do
-                                                t <- checkStructSub str sub
-                                                case t of
-                                                   S m -> case M.lookup y m of
-                                                            Just t' -> return t'
-                                                            _ -> notStruct
-                                                   _ -> notStruct
 
 checkTupleInit :: MonadState Env m => Tuple -> m TCType
 checkTupleInit (Tup e exps) = do
@@ -350,9 +324,12 @@ checkArithm :: MonadState Env m => Expr -> Expr -> m TCType
 checkArithm e1 e2 = do
                      t1 <- checkExpr e1
                      t2 <- checkExpr e2
-                     if t1 == T T_Int && t1 == t2
-                        then return $ T T_Int
-                        else errorExpected (T T_Int) (T T_Int) t1 t2
+                     if t2 == T T_Int
+                        then case t1 of
+                              T T_Int -> return t1
+                              A (T T_Int) -> return $ A $ T T_Int
+                              _ -> errorExpected2 (T T_Int) t1
+                        else errorExpected2 (T T_Int) t2
 
 checkComp :: MonadState Env m => Expr -> Expr -> m TCType
 checkComp e1 e2 = do

@@ -34,7 +34,7 @@ data Stmt
     | S_Assign Acc Expr
     | S_MAss Acc [Acc] Tuple
     | S_While Expr Stmt
-    | S_For Ident Expr Stmt
+    | S_For Ident Acc Stmt
     | S_If Expr Stmt
     | S_IfE Expr Block Stmt
     | S_Return Expr
@@ -73,6 +73,7 @@ data Expr
     | E_Min Expr
     | E_Neg Expr
     | E_ArrI Array
+    | E_ArrI2 Expr Expr
     | E_TupI Tuple
     | E_ArrS Acc ArraySub
     | E_StrS Acc StructSub
@@ -84,13 +85,6 @@ data Expr
 data Constant = False_Const | True_Const | Integer_Const Integer
   deriving (Eq, Ord, Show, Read)
 
-data Type
-    = T_Int
-    | T_Bool
-    | T_Arr Type
-    | T_Tup [Type]
-    | T_Ref Type
-    | T_Void
-    | T_Str
+data Type = T_Int | T_Bool | T_Arr Type | T_Tup [Type] | T_Ref Type
   deriving (Eq, Ord, Show, Read)
 

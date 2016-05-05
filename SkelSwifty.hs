@@ -40,7 +40,7 @@ transStmt x = case x of
   S_Assign acc expr -> failure x
   S_MAss acc accs tuple -> failure x
   S_While expr stmt -> failure x
-  S_For ident expr stmt -> failure x
+  S_For ident acc stmt -> failure x
   S_If expr stmt -> failure x
   S_IfE expr block stmt -> failure x
   S_Return expr -> failure x
@@ -78,6 +78,7 @@ transExpr x = case x of
   E_Min expr -> failure x
   E_Neg expr -> failure x
   E_ArrI array -> failure x
+  E_ArrI2 expr1 expr2 -> failure x
   E_TupI tuple -> failure x
   E_ArrS acc arraysub -> failure x
   E_StrS acc structsub -> failure x
@@ -96,6 +97,4 @@ transType x = case x of
   T_Arr type_ -> failure x
   T_Tup types -> failure x
   T_Ref type_ -> failure x
-  T_Void -> failure x
-  T_Str -> failure x
 
