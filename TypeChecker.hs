@@ -16,16 +16,17 @@ import Control.Monad.State as S
 type Var = Ident
 type FName = Ident
 type EnvV = M.Map Var TCType
-type EnvF = M.Map FName (TCType, [(Var, TCType)], Stmt)
+type EnvF = M.Map FName Func
 type CheckedFun = St.Set Var
 type Env = (EnvV,EnvF,CheckedFun)
+
+data Func = F (TCType, [(Var, TCType)], Stmt) | P ([(Var, TCType)], Stmt)
 
 data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType | None deriving (Eq, Ord)
 
 instance Show TCType where
    show (T T_Int) = "Int"
    show (T T_Bool) = "Bool"
-   show (T _) = "kupa"
    show (R t) = "&" ++ show t
    show (S m) = concat ["Struct {", desc, "}"]
                   where
@@ -59,12 +60,16 @@ expectedTuple t = error $ concat ["Type error: Expected tuple, found: ", show t]
 
 emptyEnv = (M.empty, M.empty, St.empty)
 
+-- HELPER FUNCTIONS
+newVar x t = modify (\(ev,ef,cf) -> (M.insert x t ev,ef,cf))
+newFunc x t args s = modify (\(ev,ef,cf) -> (ev, M.insert x (F (t,args,s)) ef, St.delete x cf))
+newProc x args s = modify (\(ev,ef,cf) -> (ev, M.insert x (P (args,s)) ef, St.delete x cf))
+
 -- PROGRAM
 checkProg :: Program -> IO ()
 checkProg (Prog p) = checkProg' p emptyEnv
                         where
                            checkProg' [] env = do
-                                                --mapM_ (putStrLn . show) (M.toList $ fst env)
                                                 return ()
                            checkProg' (s:ss) env = do
                                                       env' <- execStateT (checkStmt s) env
@@ -75,21 +80,19 @@ checkDecl :: MonadState Env m => Decl -> m TCType
 checkDecl (D_Var x e) = do
                            t <- checkExpr e
                            if t /= None
-                              then modify (\(ev,ef,f) -> (M.insert x t ev,ef,f)) >> return None
+                              then newVar x t >> return None
                               else errorProcAssign
 checkDecl (D_Fun x pd t s) = do
-                              (ev,ef,fs) <- get
                               let t' = case toTCType t of
                                           R _ -> refTypeError
                                           _ -> toTCType t
-                              put $ (ev, M.insert x (t', getParams pd, s) ef, St.delete x fs)
+                              newFunc x t' (getParams pd) s
                               return None
 checkDecl (D_Proc x pd s) = do
-                              (ev,ef,fs) <- get
-                              put $ (ev, M.insert x (None, getParams pd, s) ef, St.delete x fs)
+                              newProc x (getParams pd) s
                               return None
 checkDecl (D_Str x) = do
-                        modify (\(ev,ef,f) -> (M.insert x (S M.empty) ev,ef,f))
+                        newVar x (S M.empty)
                         return None
 checkDecl (D_MVar x xs e) = do
                               t <- checkExpr e
@@ -98,11 +101,9 @@ checkDecl (D_MVar x xs e) = do
                                  Tp types -> let
                                                 lt = length types
                                              in if l == lt
-                                                   then (mapM (\(x',t') -> upEnv x' t') $ zip (x:xs) types) >> return None
+                                                   then (mapM (\(x',t') -> newVar x' t') $ zip (x:xs) types) >> return None
                                                    else errorMultAssign l lt
                                  _ -> expectedTuple t
-                                 where
-                                    upEnv x t = modify (\(ev,ef,f) -> (M.insert x t ev, ef, f))
 
 toTCType :: Type -> TCType
 toTCType t = let
@@ -161,7 +162,7 @@ checkStmt (S_For x acc s) = do
                               env@(ev,ef,f) <- get
                               case t of
                                  A t' -> do
-                                          modify (\(ev',ef',f') -> (M.insert x t' ev', ef', f'))
+                                          newVar x t'
                                           checkStmt s
                                           put env
                                           return None
@@ -194,7 +195,10 @@ checkFunCall :: MonadState Env m => FCall -> m TCType
 checkFunCall (Fun_Call x exprs) = do
                                     args <- checkFuncParams exprs
                                     env@(ev,ef,fs) <- get
-                                    let (t,parTyp,s) = fromMaybe (undefFunc x) $ M.lookup x ef
+                                    let foo = fromMaybe (undefFunc x) $ M.lookup x ef
+                                    let (t,parTyp,s) = case foo of
+                                                         F x -> x
+                                                         P (x,y) -> (None,x,y)
                                     let params = map snd parTyp
                                     if paramsMatch args params
                                        then if St.member x fs
@@ -220,7 +224,7 @@ checkFunCall (Fun_Call x exprs) = do
                                                                         f = (\(x,y) -> (x == y) || (fromRef x == y))
                                                                        in if length args == length params
                                                                            then and $ map f l
-                                                                           else argsNoMatch params args
+                                                                           else argsNoMatch params $ filter (/= None) args
 
 updateStrType :: MonadState Env m => Acc -> TCType -> m TCType
 updateStrType acc t = do
@@ -233,7 +237,7 @@ updateStrType acc t = do
                               updateStrType' (A_Str acc (Str_Sub y)) t = do
                                                                            (S str',x) <- updateStrType' acc t
                                                                            let str'' = M.insert y t str'
-                                                                           modify (\(ev,ef,fs) -> (M.insert x (S str'') ev, ef,fs))
+                                                                           newVar x (S str'')
                                                                            return (S str'', y)
 
 -- EXPRESSIONS
@@ -362,5 +366,7 @@ inferType (E_VarName x) = do
                               else undefVar x
 inferType (E_FuncCall (Fun_Call f exprs)) = do
                                              (ev,ef,_) <- get
-                                             let (t,_,_) = fromMaybe (undefFunc f) $ M.lookup f ef
-                                             return t
+                                             let foo = fromMaybe (undefFunc f) $ M.lookup f ef
+                                             return $ case foo of
+                                                         F (t,_,_) -> t
+                                                         P _ -> None

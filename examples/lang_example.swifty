@@ -69,7 +69,15 @@ b = false
 //redeklaracja zmiennej w tym samym bloku - zmienna a typu int przestaje byc dostepna
 var a = false
 
-var n = 10
+var n = 5
+
+//przekazywanie przez referencje
+func timesTwo(x:&int) {
+	x = x * 2
+}
+
+timesTwo(n)
+
 var fi = fiboIter(n)
 var fr = fiboRec(n)
 
@@ -124,6 +132,9 @@ var x = 10
 	{
 		printX() // false
 		x = true
+		var x = x
+		x = false
+		printX() // false
 	}
 	printX() // true
 }
@@ -184,9 +195,25 @@ rect[1].x = 2
 rect[1].y = 2
 rect[2].x = 3
 rect[2].y = 3
-rect[3].x = 3
-rect[3].y = 3
+rect[3].x = 4
+rect[3].y = 4
+
+//kopiowanie structa
+var point2 = point
+
+point2.x = 10
+
+print point2
 
 print rect
 
 //w obecnej wersji gramatyka nie pozwala na przekazywanie structow jako parametrow funkcji ani na ich zwracanie
+
+// inne przyklady, porownania
+print {1} == {1}
+print {1} == {2}
+print {{1},{2}} == {{1},{2}}
+print (1,2) == (1,2)
+print (1,false) == (2,false)
+print str == str
+print point == point2

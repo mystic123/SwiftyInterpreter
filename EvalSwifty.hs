@@ -25,6 +25,7 @@ type EnvF = M.Map FName Func
 
 data Func = F ([PDecl],Stmt) | P ([PDecl],Stmt)
 
+-- CONTINUATIONS
 type Cont = Store -> IO (Store)
 type ContE = ExprValue -> Cont
 type ContD = Env -> Cont
@@ -36,9 +37,9 @@ type ContL = Loc -> Cont
 instance Eq ExprValue where
    I a == I b = a == b
    B a == B b = a == b
-   A v1 == A v2 = v1 == v2
+   L l1 == L l2 = l1 == l2
+   SV m1 == SV m2 = m1 == m2
    T v1 == T v2 = v1 == v2
-   SV m1 == SV m2 = M.assocs m1 == M.assocs m2
 
 instance Ord ExprValue where
    I a <= I b = a <= b
@@ -68,9 +69,6 @@ instance Show ExprValue where
                         desc = intercalate "," (map (\(Ident k,v) -> show k ++ ": " ++ show v) $ M.assocs s)
    show (T l)     = concat ["(", (intercalate "," $ map show l), ")"]
    show (L l)     = concat ["{", (intercalate "," $ map show l), "}"]
-   show (A l)     = "A: {" ++ (intercalate "," $ map show $ M.elems l) ++ "}"
-   show (S str)   = "kupa" -- ++ show $ M.toList str
-   show None      = "None"
 
 -- HELPER FUNCTIONS
 exprDiv :: ExprValue -> ExprValue -> ExprValue
@@ -78,6 +76,18 @@ exprDiv (I a) (I b) = case b of
                         0 -> divByZero
                         _ -> I $ div a b
 exprDiv (L l) (I a) = L $ map (flip exprDiv (I a)) l
+
+upStore :: Loc -> ExprValue -> Store -> Store
+upStore = M.insert
+
+lookVar :: Var -> Env -> Loc
+lookVar v (gv,_) = fromJust $ M.lookup v gv
+
+lookFunc :: FName -> Env -> Func
+lookFunc f (_,gf) = fromJust $ M.lookup f gf
+
+lookLoc :: Loc -> Store -> ExprValue
+lookLoc l s = fromJust $ M.lookup l s
 
 newLoc :: Store -> Loc
 newLoc s = if null s then 0 else (fst $ M.findMax s) + 1
@@ -89,7 +99,7 @@ newVars :: [Var] -> [Loc] -> Env -> Env
 newVars [] [] g = g
 newVars (x:xs) (l:ls) (gv, gf) = newVars xs ls (M.insert x l gv, gf)
 
-newFunc :: Var -> [PDecl] -> Stmt -> Env -> Env
+newFunc :: FName -> [PDecl] -> Stmt -> Env -> Env
 newFunc f pd s (gv, gf) = (gv, M.insert f (F (pd, s)) gf)
 
 newProc :: Var -> [PDecl] -> Stmt -> Env -> Env
@@ -111,22 +121,25 @@ isRef _ = False
 arrayFromList :: [Loc] -> ExprValue
 arrayFromList locs = A $ M.fromList $ zip [0..] locs
 
+structFromList :: [Var] -> [Loc] -> ExprValue
+structFromList keys locs = S $ M.fromList $ zip keys locs
+
 getLocs :: [ExprValue] -> Store -> ([Loc], Store)
 getLocs [] s = ([], s)
 getLocs (v:vs) s = case v of
-                     (L vals) -> (l:locs', M.insert l arr s''')
+                     (L vals) -> (l:locs', upStore l arr s''')
                                     where
                                        (locs, s') = getLocs vals s
                                        l = newLoc s'
                                        arr = arrayFromList locs
-                                       s'' = M.insert l arr s'
+                                       s'' = upStore l arr s'
                                        (locs',s''') = getLocs vs s''
-                     (SV str) -> (l:locs', M.insert l str' s''')
+                     (SV str) -> (l:locs', upStore l str' s''')
                                  where
                                     (locs, s') = getLocs (M.elems str) s
                                     l = newLoc s'
-                                    str' = S $ M.fromList $ zip (M.keys str) locs
-                                    s'' = M.insert l str' s'
+                                    str' = structFromList (M.keys str) locs
+                                    s'' = upStore l str' s'
                                     (locs', s''') = getLocs vs s''
                      _ -> (l:locs, M.insert l v s')
                            where
@@ -166,24 +179,24 @@ evalDecl (D_Var x e) g k = evalExpr e g k'
                                  k' (L vals) s = let
                                                    l = newLoc s
                                                    g' = newVar x l g
-                                                   s' = M.insert l None s
+                                                   s' = upStore l None s
                                                  in allocArray l vals g' k s'
                                  k' (SV str) s = let
                                                    l = newLoc s
                                                    g' = newVar x l g
-                                                   s' = M.insert l None s
+                                                   s' = upStore l None s
                                                   in allocStruct l str g' k s'
                                  k' n s = let
                                              l = newLoc s
                                              g' = newVar x l g
-                                             s' = M.insert l n s
+                                             s' = upStore l n s
                                           in k g' s'
 evalDecl (D_Str x) g k = k'
                         where
                            k' :: Cont
                            k' s = let
                                     l = newLoc s
-                                    s' = M.insert l (S M.empty) s
+                                    s' = upStore l (S M.empty) s
                                     g' = newVar x l g
                                   in k g' s'
 
@@ -210,14 +223,14 @@ evalDecl (D_MVar x xs e) g k = evalExpr e g (\(T es) -> multVarDecl (x:xs) es g 
 allocArray :: Loc -> [ExprValue] -> Env -> (Env -> Cont) -> Cont
 allocArray l vals g k s = let
                            (locs, s') = getLocs vals s
-                           s'' = M.insert l (arrayFromList locs) s'
+                           s'' = upStore l (arrayFromList locs) s'
                           in k g s''
 
 allocStruct :: Loc -> (M.Map Var ExprValue) -> Env -> (Env -> Cont) -> Cont
 allocStruct l str g k s = let
                            (locs, s') = getLocs (M.elems str) s
                            str' = M.fromList $ zip (M.keys str) locs
-                           s'' = M.insert l (S str') s'
+                           s'' = upStore l (S str') s'
                           in k g s''
 
 -- BLOCK
@@ -242,7 +255,7 @@ execStmt w@(S_While e s) g k kr = evalExpr e g k'
                                  where
                                     k' :: ContE
                                     k' (B b) = if b
-                                                then execStmt s g (\g' -> execStmt w g' k kr) kr
+                                                then execStmt s g (\_ -> execStmt w g k kr) kr
                                                 else k g
 execStmt (S_For x acc stmt) g k kr = execFor x acc stmt g k kr
 execStmt (S_If e s1) g k kr = evalExpr e g k'
@@ -263,12 +276,6 @@ execStmt (S_Print e) g k kr = evalExpr e g k'
                                  k' :: ContE
                                  k' n s = do
                                              putStrLn $ show n
-                                             --putStrLn "ENV:"
-                                             --mapM_ (putStrLn . show) $ M.toList $ fst g
-                                             --mapM_ (putStrLn . show) $ M.toList $ snd g
-                                             --putStrLn "----------\nSTORE:"
-                                             --mapM_ (putStrLn . show) $ M.toList s
-                                             --putStrLn "-----------\n"
                                              k g s
 execStmt (S_Expr e) g k kr = evalExpr (E_FuncCall e) g (\_ -> k g)
 
@@ -281,31 +288,31 @@ execFor x acc stmt g k kr = accToLoc acc g (\l -> \s -> execFor' x (f $ fromJust
                                  execFor' x [] stmt g k kr = k g
                                  execFor' x (l:ls) stmt g@(gv,gf) k kr = let
                                                                            block = B_Block [stmt]
-                                                                           g' = (M.insert x l gv,gf)
+                                                                           g' = newVar x l g
                                                                          in execBlock block g' (execFor' x ls stmt g k kr) kr
 
 accToLoc :: Acc -> Env -> ContL -> Cont
 accToLoc (A_Iden x) (gv,gf) k = k $ fromJust $ M.lookup x gv
-accToLoc (A_Arr acc (Arr_Sub i)) g@(gv,gf) k = accToLoc acc g k'
-                                                where
-                                                   k' :: ContL
-                                                   k' l s = let
-                                                               v = fromMaybe indexOutR $ M.lookup l s
-                                                            in evalExpr i g (\i' -> k $ (!!!) v i') s
-accToLoc (A_Str acc (Str_Sub x)) g@(gv,gf) k = accToLoc acc g k'
-                                                where
-                                                   k' :: ContL
-                                                   k' l s = let
-                                                               S str = fromJust $ M.lookup l s
-                                                               l' = M.lookup x str
-                                                            in case l' of
-                                                                  Just l'' -> k l'' s
-                                                                  Nothing -> let
-                                                                              l'' = newLoc s
-                                                                              s' = M.insert l'' None s
-                                                                              str' = M.insert x l'' str
-                                                                              s'' = M.insert l (S str') s'
-                                                                             in k l'' s''
+accToLoc (A_Arr acc (Arr_Sub i)) g k = accToLoc acc g k'
+                                          where
+                                             k' :: ContL
+                                             k' l s = let
+                                                         v = fromMaybe indexOutR $ M.lookup l s
+                                                      in evalExpr i g (\i' -> k $ (!!!) v i') s
+accToLoc (A_Str acc (Str_Sub x)) g k = accToLoc acc g k'
+                                          where
+                                             k' :: ContL
+                                             k' l s = let
+                                                         S str = lookLoc l s
+                                                         l' = M.lookup x str
+                                                      in case l' of
+                                                            Just l'' -> k l'' s
+                                                            Nothing -> let
+                                                                        l'' = newLoc s
+                                                                        s' = upStore l'' None s
+                                                                        str' = M.insert x l'' str
+                                                                        s'' = upStore l (S str') s'
+                                                                       in k l'' s''
 
 assignValue :: Acc -> ExprValue -> Env -> ContS -> Cont
 assignValue acc n g k = accToLoc acc g k'
@@ -359,31 +366,31 @@ evalExpr (E_ArrS acc (Arr_Sub i)) g k = evalExpr i g k'
                                           k' :: ContE
                                           k' n = accToLoc acc g (\l -> k'' l n)
                                           k'' l idx s = let
-                                                         l' = fromJust $ M.lookup l s
-                                                         v = fromJust $ M.lookup ((!!!) l' idx) s
+                                                         l' = lookLoc l s
+                                                         v = lookLoc ((!!!) l' idx) s
                                                          v' = getExprValue v s
                                                       in k v' s
 evalExpr (E_StrS acc (Str_Sub y)) g k = accToLoc acc g k'
                                           where
                                              k' :: ContL
                                              k' l s = let
-                                                         S str = fromJust $ M.lookup l s
+                                                         S str = lookLoc l s
                                                          l' = fromJust $ M.lookup y str
-                                                         v = fromJust $ M.lookup l' s
+                                                         v = lookLoc l' s
                                                          v' = getExprValue v s
                                                       in k v' s
 evalExpr (E_FuncCall (Fun_Call foo args)) g k = case fromJust $ M.lookup foo $ snd g of
                                                    F (pd,stmt) -> callFunc args pd stmt g notReturn k
                                                    P (pd,stmt) -> callFunc args pd stmt g (k 0) k
 evalExpr (E_Const c) g k = k $ evalConst c
-evalExpr (E_VarName x) (gv, gf) k = k'
-                                    where
-                                       k' :: Cont
-                                       k' s = let
-                                                l = fromJust $ M.lookup x gv
-                                                n = fromJust $ M.lookup l s
-                                                v = getExprValue n s
-                                              in k v s
+evalExpr (E_VarName x) g k = k'
+                              where
+                                 k' :: Cont
+                                 k' s = let
+                                          l = lookVar x g
+                                          n = lookLoc l s
+                                          v = getExprValue n s
+                                        in k v s
 
 evalExprList :: [Expr] -> Env -> ContA -> Cont
 evalExprList = evalExprList' []
@@ -399,19 +406,19 @@ evalArray l g k = evalExprList l g (\vals -> k $ L vals)
 
 callFunc :: [Expr] -> [PDecl] -> Stmt -> Env -> Cont -> ContE -> Cont
 callFunc [] _ stmt g k kr = execStmt stmt g (\_ -> k) (\n -> kr n)
-callFunc (e:es) (p:ps) stmt g@(gv,gf) k kr
-                                             | isRef p = callFunc es ps stmt (gv', gf) k kr
-                                             | otherwise = evalExpr e g k'
-                                                            where
-                                                               (P_Decl x _) = p
-                                                               (E_VarName y) = e
-                                                               l' = fromJust $ M.lookup y gv
-                                                               gv' = M.insert x l' gv
-                                                               k' :: ContE
-                                                               k' n s = let
-                                                                           l = newLoc s
-                                                                           gv'' = M.insert x l gv
-                                                                        in callFunc es ps stmt (gv'', gf) k (\n -> kr n) $ M.insert l n s
+callFunc (e:es) (p:ps) stmt g k kr
+                                 | isRef p = callFunc es ps stmt g' k kr
+                                 | otherwise = evalExpr e g k'
+                                                where
+                                                   (P_Decl x _) = p
+                                                   (E_VarName y) = e
+                                                   l' = lookVar y g
+                                                   g' = newVar x l' g
+                                                   k' :: ContE
+                                                   k' n s = let
+                                                               l = newLoc s
+                                                               g'' = newVar x l g
+                                                            in callFunc es ps stmt g'' k (\n -> kr n) $ upStore l n s
 
 locToExprVal :: Store -> Loc -> ExprValue
 locToExprVal s l = case val of
