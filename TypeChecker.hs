@@ -55,6 +55,7 @@ invRetType = error "Type error: Type of return value does not match function's r
 refTypeError = error "Type error: Expected type, found reference"
 errorMultAssign l1 l2 = error $ concat ["Error in multiple assign: ", "Expected: ", show l1 , " values, found: ", show l2]
 errorProcAssign = error "Type error: Fuction does not return any value"
+expectedTuple t = error $ concat ["Type error: Expected tuple, found: ", show t]
 
 emptyEnv = (M.empty, M.empty, St.empty)
 
@@ -78,7 +79,10 @@ checkDecl (D_Var x e) = do
                               else errorProcAssign
 checkDecl (D_Fun x pd t s) = do
                               (ev,ef,fs) <- get
-                              put $ (ev, M.insert x (toTCType t, getParams pd, s) ef, St.delete x fs)
+                              let t' = case toTCType t of
+                                          R _ -> refTypeError
+                                          _ -> toTCType t
+                              put $ (ev, M.insert x (t', getParams pd, s) ef, St.delete x fs)
                               return None
 checkDecl (D_Proc x pd s) = do
                               (ev,ef,fs) <- get
@@ -87,12 +91,18 @@ checkDecl (D_Proc x pd s) = do
 checkDecl (D_Str x) = do
                         modify (\(ev,ef,f) -> (M.insert x (S M.empty) ev,ef,f))
                         return None
-checkDecl (D_MVar x xs (Tup e es)) = do
-                                       let l1 = length (x:xs)
-                                       let l2 = length (e:es)
-                                       if l1 == l2
-                                          then (mapM (\(x',e') -> checkDecl (D_Var x' e')) $ zip (x:xs) (e:es)) >> return None
-                                          else errorMultAssign l1 l2
+checkDecl (D_MVar x xs e) = do
+                              t <- checkExpr e
+                              let l = length (x:xs)
+                              case t of
+                                 Tp types -> let
+                                                lt = length types
+                                             in if l == lt
+                                                   then (mapM (\(x',t') -> upEnv x' t') $ zip (x:xs) types) >> return None
+                                                   else errorMultAssign l lt
+                                 _ -> expectedTuple t
+                                 where
+                                    upEnv x t = modify (\(ev,ef,f) -> (M.insert x t ev, ef, f))
 
 toTCType :: Type -> TCType
 toTCType t = let
@@ -280,7 +290,7 @@ getAccType (A_Arr acc _) = do
 getAccType (A_Str acc (Str_Sub x)) = do
                                        t <- getAccType acc
                                        case t of
-                                          S m -> return $ fromMaybe (undefStructEl x) $ M.lookup x m
+                                          S m -> return $ fromMaybe None $ M.lookup x m
                                           _ -> notStruct
 
 checkArrSub :: MonadState Env m => ArraySub -> m TCType

@@ -16,7 +16,7 @@ data Decl
     | D_Proc Ident [PDecl] Stmt
     | D_Var Ident Expr
     | D_Str Ident
-    | D_MVar Ident [Ident] Tuple
+    | D_MVar Ident [Ident] Expr
   deriving (Eq, Ord, Show, Read)
 
 data PDecl = P_Decl Ident Type

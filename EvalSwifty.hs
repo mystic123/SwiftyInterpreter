@@ -13,7 +13,7 @@ type AArray = M.Map Int Loc
 type Struct = M.Map Var Loc
 type StructVal = M.Map Var ExprValue
 
-data ExprValue = I Integer | B Bool | A AArray | T [ExprValue] | S Struct | L [ExprValue] | Str StructVal | None
+data ExprValue = I Integer | B Bool | A AArray | T [ExprValue] | S Struct | L [ExprValue] | SV StructVal | None
 
 type Loc = Integer
 type Var = Ident
@@ -38,7 +38,7 @@ instance Eq ExprValue where
    B a == B b = a == b
    A v1 == A v2 = v1 == v2
    T v1 == T v2 = v1 == v2
-   Str m1 == Str m2 = M.assocs m1 == M.assocs m2
+   SV m1 == SV m2 = M.assocs m1 == M.assocs m2
 
 instance Ord ExprValue where
    I a <= I b = a <= b
@@ -63,11 +63,13 @@ instance Num ExprValue where
 instance Show ExprValue where
    show (I n)     = show n
    show (B b)     = show b
+   show (SV s)    = concat ["Struct: {", desc, "}"]
+                     where
+                        desc = intercalate "," (map (\(Ident k,v) -> show k ++ ": " ++ show v) $ M.assocs s)
+   show (T l)     = concat ["(", (intercalate "," $ map show l), ")"]
+   show (L l)     = concat ["{", (intercalate "," $ map show l), "}"]
    show (A l)     = "A: {" ++ (intercalate "," $ map show $ M.elems l) ++ "}"
-   show (T l)     = "T: (" ++ (intercalate "," $ map show l) ++ ")"
-   show (L l)     = "{" ++ (intercalate "," $ map show l) ++ "}"
-   show (S str)   = show $ M.toList str
-   show (Str s)   = show $ M.toList s
+   show (S str)   = "kupa" -- ++ show $ M.toList str
    show None      = "None"
 
 -- HELPER FUNCTIONS
@@ -119,7 +121,7 @@ getLocs (v:vs) s = case v of
                                        arr = arrayFromList locs
                                        s'' = M.insert l arr s'
                                        (locs',s''') = getLocs vs s''
-                     (Str str) -> (l:locs', M.insert l str' s''')
+                     (SV str) -> (l:locs', M.insert l str' s''')
                                  where
                                     (locs, s') = getLocs (M.elems str) s
                                     l = newLoc s'
@@ -166,7 +168,7 @@ evalDecl (D_Var x e) g k = evalExpr e g k'
                                                    g' = newVar x l g
                                                    s' = M.insert l None s
                                                  in allocArray l vals g' k s'
-                                 k' (Str str) s = let
+                                 k' (SV str) s = let
                                                    l = newLoc s
                                                    g' = newVar x l g
                                                    s' = M.insert l None s
@@ -197,7 +199,7 @@ evalDecl (D_Proc proc pd stmt) g k = k'
                                        k' = let
                                              g' = newProc proc pd stmt g
                                             in k g'
-evalDecl (D_MVar x xs t) g k = evalExpr (E_TupI t) g (\(T es) -> multVarDecl (x:xs) es g k)
+evalDecl (D_MVar x xs e) g k = evalExpr e g (\(T es) -> multVarDecl (x:xs) es g k)
                                           where
                                              multVarDecl :: [Var] -> [ExprValue] -> Env -> ContD -> Cont
                                              multVarDecl x y g k s = let
@@ -311,7 +313,7 @@ assignValue acc n g k = accToLoc acc g k'
                            k' :: ContL
                            k' l s = case n of
                                        (L vals) -> allocArray l vals g k s
-                                       (Str str) -> allocStruct l str g k s
+                                       (SV str) -> allocStruct l str g k s
                                        _ -> let
                                              s' = M.insert l n s
                                             in k g s'
@@ -367,8 +369,9 @@ evalExpr (E_StrS acc (Str_Sub y)) g k = accToLoc acc g k'
                                              k' l s = let
                                                          S str = fromJust $ M.lookup l s
                                                          l' = fromJust $ M.lookup y str
-                                                         n = fromJust $ M.lookup l' s
-                                                      in k n s
+                                                         v = fromJust $ M.lookup l' s
+                                                         v' = getExprValue v s
+                                                      in k v' s
 evalExpr (E_FuncCall (Fun_Call foo args)) g k = case fromJust $ M.lookup foo $ snd g of
                                                    F (pd,stmt) -> callFunc args pd stmt g notReturn k
                                                    P (pd,stmt) -> callFunc args pd stmt g (k 0) k
@@ -381,13 +384,6 @@ evalExpr (E_VarName x) (gv, gf) k = k'
                                                 n = fromJust $ M.lookup l s
                                                 v = getExprValue n s
                                               in k v s
-
-getExprValue :: ExprValue -> Store -> ExprValue
-getExprValue v s = case v of
-                     A arr -> getArray (M.elems arr) s
-                     S str -> getStruct str s
-                     _ -> v
-
 
 evalExprList :: [Expr] -> Env -> ContA -> Cont
 evalExprList = evalExprList' []
@@ -425,6 +421,12 @@ locToExprVal s l = case val of
                   where
                      val = fromJust $ M.lookup l s
 
+getExprValue :: ExprValue -> Store -> ExprValue
+getExprValue v s = case v of
+                     A arr -> getArray (M.elems arr) s
+                     S str -> getStruct str s
+                     _ -> v
+
 getArray :: [Loc] -> Store -> ExprValue
 getArray locs = getArray' [] $ reverse locs
             where
@@ -447,7 +449,7 @@ getStruct = getStruct' M.empty
                getStruct' :: StructVal -> Struct -> Store -> ExprValue
                getStruct' r str s = let
                                        str' = M.map (locToExprVal s) str
-                                    in Str $ M.union r str'
+                                    in SV $ M.union r str'
 
 evalComp :: (ExprValue -> ExprValue -> Bool) -> Expr -> Expr -> Env -> ContE -> Cont
 evalComp f e1 e2 g k = evalExpr e1 g (\v1 -> evalExpr e2 g (\v2 -> k $ B $ f v1 v2))

@@ -10,7 +10,7 @@ D_Fun.   Decl     ::= "func" Ident "(" [PDecl] ")" "->" Type Stmt ;
 D_Proc.  Decl     ::= "func" Ident "(" [PDecl] ")" Stmt ;
 D_Var.	Decl		::= "var" Ident "=" Expr ;
 D_Str.	Decl		::= "struct" Ident ;
-D_MVar.  Decl     ::= "var" Ident "," [Ident] "=" Tuple ;
+D_MVar.  Decl     ::= "var" Ident "," [Ident] "=" Expr ;
 
 P_Decl.  PDecl    ::= Ident ":" Type ;
 

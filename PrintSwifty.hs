@@ -94,7 +94,7 @@ instance Print Decl where
     D_Proc id pdecls stmt -> prPrec i 0 (concatD [doc (showString "func"), prt 0 id, doc (showString "("), prt 0 pdecls, doc (showString ")"), prt 0 stmt])
     D_Var id expr -> prPrec i 0 (concatD [doc (showString "var"), prt 0 id, doc (showString "="), prt 0 expr])
     D_Str id -> prPrec i 0 (concatD [doc (showString "struct"), prt 0 id])
-    D_MVar id ids tuple -> prPrec i 0 (concatD [doc (showString "var"), prt 0 id, doc (showString ","), prt 0 ids, doc (showString "="), prt 0 tuple])
+    D_MVar id ids expr -> prPrec i 0 (concatD [doc (showString "var"), prt 0 id, doc (showString ","), prt 0 ids, doc (showString "="), prt 0 expr])
 
 instance Print PDecl where
   prt i e = case e of

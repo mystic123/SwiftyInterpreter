@@ -88,8 +88,12 @@ arr = arr * 10 // {30,40,50}
 arr = arr / 2 // {15,20,25}
 print arr 
 
-//wielowymiarowa tablica o rozmiarze 10x10 wypelniona 0
-var arr2 = array(10, array(10, 0))
+//funkcja zwracajaca tablice
+func rectArray(n:int, m:int) -> Array of Array of int {
+	//tworzy tablice o wymiarach n x m wypelniona zerami
+	return array(n, array(m, 0))
+}
+var arr2 = rectArray(10,10)
 //modyfikacja komorek tablicy
 arr2[0][0] = 10
 arr2[5][5] = 50
@@ -102,6 +106,7 @@ for x in arr2 {
 	print x
 }
 
+//przekazywanie tablicy do funkcji
 var fm = fiboMemo(5,fiboNumbers)
 print fiboNumbers
 fm = fiboMemo(10,fiboNumbers)
@@ -113,6 +118,7 @@ var x = 10
 	printX() // 10
 	x = 20
 	printX() // 20
+	//przesloniecie x (lokalna w bloku zmienna)
 	var x = false
 	printX() // false
 	{
@@ -122,3 +128,65 @@ var x = 10
 	printX() // true
 }
 printX() // 20
+
+//krotki
+var tup = (111,222,false)
+print tup
+
+//przypisanie z krotki
+var q,w,e = tup 
+q,w,e = (222,333,true)
+print q
+print w
+print e
+
+//przekazywanie krotki i zwracanie krotki
+func reverseTuple(t:(int,int,bool)) -> (bool,int,int) {
+	var a,b,c = t
+	return (c,b,a)
+}
+
+var tup2 = reverseTuple(tup)
+print tup2
+
+//structy
+struct str
+str.a = 10
+str.b = false
+//tablica w structcie
+str.t = {777,888,999}
+str.tup = (false,5,3)
+
+struct str2
+str2.x = 5
+str2.y = 55
+print str2
+//zagniezdzanie structow
+str.c = str2
+print str
+
+//modyfikacja structow
+str.a = 20
+str.t[0] = 444
+str.c.x = 500
+
+print str
+print str.c
+
+struct point
+point.x = 0
+point.y = 0
+//tablica structow
+var rect = array(4,point)
+rect[0].x = 1
+rect[0].y = 1
+rect[1].x = 2
+rect[1].y = 2
+rect[2].x = 3
+rect[2].y = 3
+rect[3].x = 3
+rect[3].y = 3
+
+print rect
+
+//w obecnej wersji gramatyka nie pozwala na przekazywanie structow jako parametrow funkcji ani na ich zwracanie

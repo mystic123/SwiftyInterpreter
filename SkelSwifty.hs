@@ -21,7 +21,7 @@ transDecl x = case x of
   D_Proc ident pdecls stmt -> failure x
   D_Var ident expr -> failure x
   D_Str ident -> failure x
-  D_MVar ident idents tuple -> failure x
+  D_MVar ident idents expr -> failure x
 transPDecl :: PDecl -> Result
 transPDecl x = case x of
   P_Decl ident type_ -> failure x
