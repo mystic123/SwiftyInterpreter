@@ -7,6 +7,7 @@ module EvalSwifty where
 import Data.Maybe
 import AbsSwifty
 import Data.List --intercalate
+import Control.Monad.State
 import qualified Data.Map as M
 
 type AArray = M.Map Int Loc
@@ -23,7 +24,7 @@ type Env = (EnvV, EnvF)
 type EnvV = M.Map Var Loc
 type EnvF = M.Map FName Func
 
-data Func = F ([PDecl],Stmt) | P ([PDecl],Stmt)
+data Func = F (Env,[PDecl],Stmt) | P (Env,[PDecl],Stmt)
 
 -- CONTINUATIONS
 type Cont = Store -> IO (Store)
@@ -100,10 +101,14 @@ newVars [] [] g = g
 newVars (x:xs) (l:ls) (gv, gf) = newVars xs ls (M.insert x l gv, gf)
 
 newFunc :: FName -> [PDecl] -> Stmt -> Env -> Env
-newFunc f pd s (gv, gf) = (gv, M.insert f (F (pd, s)) gf)
+newFunc x pd s (gv, gf) = let
+                           f = fix (\f' -> (F ((gv,M.insert x f' gf), pd, s)))
+                          in (gv, M.insert x f gf)
 
 newProc :: Var -> [PDecl] -> Stmt -> Env -> Env
-newProc f pd s (gv, gf) = (gv, M.insert f (P (pd, s)) gf)
+newProc x pd s (gv, gf) = let
+                           f = fix (\f' -> (P ((gv, M.insert x f' gf), pd, s)))
+                          in (gv, M.insert x f gf)
 
 emptyStore :: Store
 emptyStore = M.empty
@@ -380,8 +385,8 @@ evalExpr (E_StrS acc (Str_Sub y)) g k = accToLoc acc g k'
                                                          v' = getExprValue v s
                                                       in k v' s
 evalExpr (E_FuncCall (Fun_Call foo args)) g k = case fromJust $ M.lookup foo $ snd g of
-                                                   F (pd,stmt) -> callFunc args pd stmt g notReturn k
-                                                   P (pd,stmt) -> callFunc args pd stmt g (k 0) k
+                                                   F (g',pd,stmt) -> callFunc args pd stmt g' notReturn k
+                                                   P (g',pd,stmt) -> callFunc args pd stmt g' (k 0) k
 evalExpr (E_Const c) g k = k $ evalConst c
 evalExpr (E_VarName x) g k = k'
                               where
