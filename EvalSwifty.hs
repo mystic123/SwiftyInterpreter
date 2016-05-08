@@ -385,8 +385,8 @@ evalExpr (E_StrS acc (Str_Sub y)) g k = accToLoc acc g k'
                                                          v' = getExprValue v s
                                                       in k v' s
 evalExpr (E_FuncCall (Fun_Call foo args)) g k = case fromJust $ M.lookup foo $ snd g of
-                                                   F (g',pd,stmt) -> callFunc args pd stmt g' notReturn k
-                                                   P (g',pd,stmt) -> callFunc args pd stmt g' (k 0) k
+                                                   F (g',pd,stmt) -> callFunc args pd stmt g g' notReturn k
+                                                   P (g',pd,stmt) -> callFunc args pd stmt g g' (k 0) k
 evalExpr (E_Const c) g k = k $ evalConst c
 evalExpr (E_VarName x) g k = k'
                               where
@@ -409,21 +409,21 @@ evalTuple l g k = evalExprList l g (\vals -> k $ T vals)
 evalArray :: [Expr] -> Env -> ContE -> Cont
 evalArray l g k = evalExprList l g (\vals -> k $ L vals)
 
-callFunc :: [Expr] -> [PDecl] -> Stmt -> Env -> Cont -> ContE -> Cont
-callFunc [] _ stmt g k kr = execStmt stmt g (\_ -> k) (\n -> kr n)
-callFunc (e:es) (p:ps) stmt g k kr
-                                 | isRef p = callFunc es ps stmt g' k kr
-                                 | otherwise = evalExpr e g k'
-                                                where
-                                                   (P_Decl x _) = p
-                                                   (E_VarName y) = e
-                                                   l' = lookVar y g
-                                                   g' = newVar x l' g
-                                                   k' :: ContE
-                                                   k' n s = let
-                                                               l = newLoc s
-                                                               g'' = newVar x l g
-                                                            in callFunc es ps stmt g'' k (\n -> kr n) $ upStore l n s
+callFunc :: [Expr] -> [PDecl] -> Stmt -> Env -> Env -> Cont -> ContE -> Cont
+callFunc [] _ stmt g gc k kr = execStmt stmt gc (\_ -> k) (\n -> kr n)
+callFunc (e:es) (p:ps) stmt g gc k kr
+                                    | isRef p = callFunc es ps stmt g gc' k kr
+                                    | otherwise = evalExpr e g k'
+                                                   where
+                                                      (P_Decl x _) = p
+                                                      (E_VarName y) = e
+                                                      l' = lookVar y g
+                                                      gc' = newVar x l' gc
+                                                      k' :: ContE
+                                                      k' n s = let
+                                                                  l = newLoc s
+                                                                  gc'' = newVar x l gc
+                                                               in callFunc es ps stmt g gc'' k (\n -> kr n) $ upStore l n s
 
 locToExprVal :: Store -> Loc -> ExprValue
 locToExprVal s l = case val of

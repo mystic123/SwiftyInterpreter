@@ -19,7 +19,7 @@ type EnvF = M.Map FName Func
 type Env = (EnvV,EnvF)
 
 type FArgs = [(Var, TCType)]
-data Func = F (TCType, FArgs) | P (FArgs)
+data Func = F (TCType, FArgs)
 
 data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType | None deriving (Eq, Ord)
 
@@ -59,18 +59,15 @@ emptyEnv = (M.empty, M.empty)
 
 -- HELPER FUNCTIONS
 newVar x t = modify (\(ev,ef) -> (M.insert x t ev,ef))
-newFunc x t args s = checkFuncStmt t args s >> modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef))
-newProc x args s = checkFuncStmt None args s >> modify (\(ev,ef) -> (ev, M.insert x (P (args)) ef))
-
---checkFunStmt :: MonadState Env m => TCType -> FArgs -> Stmt -> m TCType
-checkFuncStmt t args s = do
-                           (ev,ef) <- get
-                           mapM (\(x,t) -> modify (\(ev,ef) -> (M.insert x (fromRef t) ev, ef))) args
-                           rt <- checkStmt s
-                           put (ev,ef)
-                           if rt == t
-                              then return None
-                              else invRetType
+newFunc x t args s = do
+                        (ev,ef) <- get
+                        modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef))
+                        mapM (\(x,t) -> modify (\(ev,ef) -> (M.insert x (fromRef t) ev, ef))) args
+                        rt <- checkStmt s
+                        put (ev,ef)
+                        if rt == t
+                           then modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef)) >> return None
+                           else invRetType
 
 fromRef :: TCType -> TCType
 fromRef t = case t of
@@ -101,7 +98,7 @@ checkDecl (D_Fun x pd t s) = do
                               newFunc x t' (getParams pd) s
                               return None
 checkDecl (D_Proc x pd s) = do
-                              newProc x (getParams pd) s
+                              newFunc x None (getParams pd) s
                               return None
 checkDecl (D_Str x) = do
                         newVar x (S M.empty)
@@ -207,10 +204,7 @@ checkFunCall :: MonadState Env m => FCall -> m TCType
 checkFunCall (Fun_Call x exprs) = do
                                     args <- checkFuncParams exprs
                                     (ev,ef) <- get
-                                    let foo = fromMaybe (undefFunc x) $ M.lookup x ef
-                                    let (t,parTyp) = case foo of
-                                                         F x -> x
-                                                         P (x) -> (None,x)
+                                    let F (t,parTyp) = fromMaybe (undefFunc x) $ M.lookup x ef
                                     let params = map snd parTyp
                                     if paramsMatch args params
                                        then return t
@@ -364,7 +358,5 @@ inferType (E_VarName x) = do
                               else undefVar x
 inferType (E_FuncCall (Fun_Call f exprs)) = do
                                              (ev,ef) <- get
-                                             let foo = fromMaybe (undefFunc f) $ M.lookup f ef
-                                             return $ case foo of
-                                                         F (t,_) -> t
-                                                         P _ -> None
+                                             let F (t,_) = fromMaybe (undefFunc f) $ M.lookup f ef
+                                             return t
