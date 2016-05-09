@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
 
-import System.IO
+import System.IO (stdin, hGetContents)
 import System.Environment (getArgs, getProgName)
 import System.Exit (exitFailure, exitSuccess)
 
@@ -24,10 +24,10 @@ runFile p f = readFile f >>= run p
 run :: (Print Program, Show Program) => ParseFun Program -> String -> IO ()
 run p s = let ts = myLLexer s in
                case p ts of
-                  Bad s    -> do hPutStrLn stderr "Parse Failed..."
+                  Bad s    -> do putStrLn "Parse Failed..."
                                  --putStrLn "Tokens:"
                                  --putStrLn $ show ts
-                                 hPutStrLn stderr s
+                                 putStrLn s
                                  exitFailure
                   Ok tree  -> do --putStrLn "\nParse Successful!"
                                  --showTree tree
