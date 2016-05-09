@@ -1,0 +1,23 @@
+//tuples
+var tup = (111,222,false)
+print tup
+
+//assinging from tuple
+var q,w,e = tup
+q,w,e = (222,333,true)
+print q
+print w
+print e
+
+//passing tuple as reference and returning a tuple
+func reverseTuple(t:(int,int,bool)) -> (bool,int,int) {
+	var a,b,c = t
+	return (c,b,a)
+}
+
+var tup2 = reverseTuple(tup)
+print tup2
+
+//tuple comparison
+print (1,2) == (1,2)
+print (1,false) != (2,false)

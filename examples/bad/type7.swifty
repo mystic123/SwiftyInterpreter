@@ -1,0 +1,6 @@
+//arrays of references are not allowed
+func foo(a:Array of &int) {
+   print a
+}
+
+foo()

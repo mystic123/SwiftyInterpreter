@@ -1,0 +1,4 @@
+//variable initialization without assignment
+var x
+
+x = 10

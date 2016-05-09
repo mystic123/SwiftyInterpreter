@@ -1,0 +1,5 @@
+func foo(n:&int) {
+   n = 10
+}
+
+print foo(5) //error - foo wants a reference to int

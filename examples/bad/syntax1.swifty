@@ -1,0 +1,5 @@
+//missing block after if in if-else
+if (true)
+	print 1
+else
+	print 0

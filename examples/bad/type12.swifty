@@ -1,0 +1,6 @@
+//return in a procedure
+func foo() {
+   return 5
+}
+
+foo()

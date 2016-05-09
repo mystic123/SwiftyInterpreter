@@ -1,0 +1,51 @@
+//structs are dynamic, elemes of struct doesnt need to be defined before assigning
+struct str
+str.a = 10
+str.b = false
+//array in struct
+str.t = {777,888,999}
+str.tup = (false,5,3)
+
+struct str2
+str2.x = 5
+str2.y = 55
+print str2
+//struct inside a struct
+str.c = str2
+print str
+
+//modifing struct
+str.a = 20
+str.t[0] = 444
+str.c.x = 500
+
+print str
+print str.c
+
+struct point
+point.x = 0
+point.y = 0
+
+//array of structs
+var rect = array(4,point)
+rect[0].x = 1
+rect[0].y = 1
+rect[1].x = 2
+rect[1].y = 2
+rect[2].x = 3
+rect[2].y = 3
+rect[3].x = 4
+rect[3].y = 4
+
+//copying structs
+var point2 = point
+
+point2.x = 10
+
+print point2
+
+print rect
+
+//struct comparison
+print str == str
+print point != point2

@@ -1,0 +1,5 @@
+//undefined variable
+print x
+
+//undefined function
+print foo(1)

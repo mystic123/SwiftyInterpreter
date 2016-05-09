@@ -1,0 +1,76 @@
+//passing an array to function by reference
+func fiboMemo(n:int, memory:&Array of int) -> int {
+	memory[0] = 0
+	memory[1] = 1
+	func fiboWithMemo(n:int) -> int {
+		if (n == 0) {
+			return 0
+		}
+		else if (n == 1) {
+				return 1
+		} else {
+			if (memory[n] == -1) {
+				var f = fiboWithMemo(n-1) + fiboWithMemo(n-2)
+				memory[n] = f
+			}
+		}
+		return memory[n]
+	}
+	if (memory[n] == -1) {
+		return fiboWithMemo(n)
+	} else {
+		return memory[n]
+	}
+}
+
+//array(n, x) - creates an array of size n with repeated value x
+var fiboNumbers = array(11,-1)
+
+//initialization list
+var arr = {1,2,3}
+
+//arythmetic operations on arrays
+arr = arr + 5 // {6,7,8}
+arr = arr - 3 // {3,4,5}
+arr = arr * 10 // {30,40,50}
+arr = arr / 2 // {15,20,25}
+print arr
+
+//function returning an array
+func rectArray(n:int, m:int) -> Array of Array of int {
+	//tworzy tablice o wymiarach n x m wypelniona zerami
+	return array(n, array(m, 0))
+}
+
+var arr2 = rectArray(10,10)
+
+//modify array element
+arr2[0][0] = 10
+arr2[5][5] = 50
+arr2[9][9] = 90
+
+//foreach
+for x in arr2 {
+	//array is accessed by reference, following line modifies it
+	x[1] = 1
+   if (x[9] == 90) {
+		//changing array's size
+      x = {9,9}
+   }
+}
+
+for x in arr2 {
+   print x
+}
+
+//passing array to function
+var fm = fiboMemo(5,fiboNumbers)
+print fiboNumbers
+
+fm = fiboMemo(10,fiboNumbers)
+print fiboNumbers
+
+//array comparison
+print {1} == {1}
+print {1} == {2}
+print {{1},{2}} != {{1},{2}}

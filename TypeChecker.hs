@@ -1,3 +1,8 @@
+{--
+   Autor: Paweł Kapica, 334579
+   Interpreter języka Swifty
+   Plik zawierający funkcje odpowiedzialne za kontrolę typow przed wykonaniem programu
+--}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}

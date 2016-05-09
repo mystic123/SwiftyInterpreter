@@ -1,3 +1,8 @@
+{--
+   Autor: Paweł Kapica, 334579
+   Interpreter języka Swifty
+   Plik zawierający funkcje odpowiedzialne za ewaluację konstrukcji języka
+--}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -90,7 +95,7 @@ lookLoc :: Loc -> Store -> ExprValue
 lookLoc l s = fromJust $ M.lookup l s
 
 newLoc :: Store -> Loc
-newLoc s = if null s then 0 else (fst $ M.findMax s) + 1
+newLoc s = if M.null s then 0 else (fst $ M.findMax s) + 1
 
 newVar :: Var -> Loc -> Env -> Env
 newVar x l (gv, gf) = (M.insert x l gv, gf)
