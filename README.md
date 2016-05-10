@@ -21,7 +21,7 @@ Both containing:
   
 ## Language description
 *Swifty* is interpreted, strongly typed programming language. Types of the variables are inferred by interpreter.
-Variables are dynamically binded. Syntax of the language is derived from Apple's programming language *Swifty*.
+Variables are dynamically/statically binded. Syntax of the language is derived from Apple's programming language *Swifty*.
 
 ### Data types
 1. Basic
