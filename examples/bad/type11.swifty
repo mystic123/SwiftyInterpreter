@@ -1,0 +1,12 @@
+func foo() {
+   //undefined variable
+   print x
+}
+
+var x = 1
+
+//undefined variable
+print y
+
+//undefined functions
+print g(1)

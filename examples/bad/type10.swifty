@@ -1,0 +1,14 @@
+//invalid number of arguments
+func foo(n:int, b:bool, x:&int) {
+   print 1
+}
+
+foo(0,false)
+
+
+func foo2(n:int, b:bool, x:&int) {
+   print 1
+}
+
+var x = 10
+foo(0,false,x,x)

@@ -1,0 +1,7 @@
+//function does not return any value
+func foo() -> int {
+   if (false)
+      return 0
+}
+
+foo()

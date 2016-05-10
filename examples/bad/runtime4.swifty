@@ -1,0 +1,5 @@
+//array with not positive size
+
+var x = 0
+
+var arr = array(x,10)

@@ -1,0 +1,2 @@
+//semicolon is not allowed in language
+var x = 10;

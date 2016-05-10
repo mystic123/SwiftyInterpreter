@@ -1,0 +1,6 @@
+//mismatched function arg
+func foo(n:int) {
+   print n
+}
+
+print foo(true)

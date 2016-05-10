@@ -1,0 +1,4 @@
+var x = 5
+print x[0] // x is an integer, not an array
+
+print x.a // nor a struct

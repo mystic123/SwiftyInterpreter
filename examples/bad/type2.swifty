@@ -1,0 +1,4 @@
+//variables are strongly typed
+
+var x = 1 //x type is int
+x = false // error

@@ -1,0 +1,33 @@
+var x = 10
+
+func printX() {
+   //static binding of x declared in line 1.
+	print x
+}
+
+//variables
+var a = 10
+a = 20
+var b = true
+b = false
+//redeclaration of a variable, a of type int is no longer accessible
+var a = false
+
+//blocks
+{
+	printX() // 10
+	x = 20
+	printX() // 20
+	//redeclaration of x inside a block
+	var x = false
+   print x // false
+	printX() // 20
+	{
+		x = true
+		var x = x
+		x = false
+      printX() // 20
+	}
+	print x // true
+}
+printX() // 10

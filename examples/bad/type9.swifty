@@ -1,0 +1,12 @@
+//function without return
+func foo() -> int {
+   print 0
+}
+
+//function returning wrong type
+func foo2() -> int {
+   return false
+}
+
+foo()
+foo2()

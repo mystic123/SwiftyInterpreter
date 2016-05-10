@@ -1,0 +1,55 @@
+//function
+func fiboIter(n:int) -> int {
+	var a,b = (0,1)
+	while (n > 1) {
+		var tmp = a
+		a = b
+		b = tmp + b
+		n = n - 1
+	}
+	return b
+}
+
+//recursion, defining function inside another function
+func fiboRec(n:int) -> int {
+	func minusOne(x:int) -> int {
+      x = x - 1
+      return x
+	}
+	func minusTwo(x:int) -> int {
+		return minusOne(minusOne(x))
+	}
+	if (n == 0)
+		return 0
+	if (n == 1)
+		return 1
+	return fiboRec(minusOne(n)) + fiboRec(minusTwo(n))
+}
+
+
+var n = 5
+//argument passed by reference
+func timesTwo(x:&int) {
+   func foo(x:int) {
+      x = x * 5
+   }
+   foo(x) //will not affect x
+	x = x * 2
+}
+
+timesTwo(n)
+
+if (n == 10) {
+   var fi = fiboIter(n)
+   var fr = fiboRec(n)
+
+	print fi
+	print fr
+
+	//procedure
+	func printt() {
+		print fi
+		print fr
+	}
+   printt()
+}

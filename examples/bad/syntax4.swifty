@@ -1,0 +1,4 @@
+//function with struct as argument
+func foo(x:struct) {
+   print  x
+}
