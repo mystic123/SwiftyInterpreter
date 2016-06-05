@@ -1,0 +1,69 @@
+//sortowanie przez wstawianie z comparatorem
+func sort(A: &Array of int, n:int, comp: func (int, int) -> bool) {
+	var i = 1
+	while (i < n) {
+		var k = A[i]
+		var j = i - 1
+		while (j >= 0 && comp(A[j],k)) {
+			A[j + 1] = A[j]
+			A[j] = k
+			j = j - 1
+		}
+		i = i + 1
+	}
+}
+var N = 10
+var arr = {1, 5, 7, 2, 6, 9, 0, 2, 7, 1}
+
+print arr
+
+//sortowanie nierosnace
+sort(arr, N, (a:int, b:int) -> bool in { return a < b })
+print arr
+
+//sortowanie niemalejace
+var comp = (a:int, b:int) -> bool in { return a > b }
+sort(arr, N, comp)
+print arr
+
+//rekurencyjna funkcja anonimowa
+var fibo = (n:int) -> int in {
+	if (n == 0)
+		return 0
+	if (n == 1)
+		return 1
+	return fibo(n-2) + fibo(n-1)
+}
+
+print fibo(10)
+
+//przypisanie
+var f = fibo
+print f(10)
+
+//lambdy musza byc funkcjami, przekazywanie przez referencje
+var addOne = (n:&int) -> int in {
+	n = n + 1
+	return 0
+}
+
+var x = 0
+addOne(x)
+print x
+
+var c = 100
+var l = () -> int in {
+	//wiazanie zmiennych
+	return c
+}
+
+print l()
+
+//funkcja zwracajaca funkcje
+var l1 = () -> (func (int) -> int) in {
+	return ((x:int) -> int in { return x + 500 })
+}
+
+var l2 = l1()
+print l2(8)
+

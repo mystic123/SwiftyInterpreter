@@ -21,7 +21,23 @@ type Env = (EnvV,EnvF)
 type FArgs = [(Var, TCType)]
 data Func = F (TCType, FArgs)
 
-data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType | None deriving (Eq, Ord)
+data TCType = S (M.Map Var TCType) | T Type | A TCType | Tp [TCType] | R TCType
+   | Fn (TCType, [TCType])
+   | FnA (TCType, FArgs)
+   | None deriving (Ord)
+
+instance Eq TCType where
+   (==) (Fn (t1,args1)) (Fn (t2,args2)) = t1 == t2 && args1 == args2
+   (==) (FnA (t1,args1)) (FnA (t2,args2)) = t1 == t2 && args1 == args2
+   (==) (Fn (t1,args1)) (FnA (t2,args2)) = t1 == t2 && args1 == (map snd args2)
+   (==) x@(FnA _) y@(Fn _) = y == x
+   (==) (S m1) (S m2) = m1 == m2
+   (==) (T t1) (T t2) = t1 == t2
+   (==) (A t1) (A t2) = t1 == t2
+   (==) (Tp t1) (Tp t2) = t1 == t2
+   (==) (R t1) (R t2) = t1 == t2
+   (==) None None = True
+   (==) x y = False
 
 instance Show TCType where
    show (T T_Int) = "Int"
@@ -31,7 +47,9 @@ instance Show TCType where
                   where
                      desc = intercalate "," (map (\(Ident k,v) -> show k ++ ": " ++ show v) $ M.assocs m)
    show (A t) = (show t) ++ "[]"
-   show (Tp l) = concat ["(", intercalate "," (map show l),")"]
+   show (Tp l) = concat ["Tp(", intercalate "," (map show l),")"]
+   show (Fn (t,a)) = concat ["Fn(", intercalate "," (map show a), ") -> ", show t]
+   show (FnA (t,a)) = concat ["FnA(", intercalate "," (map show $ map snd a), ") -> ", show t]
    show None = "None"
 
 -- ERRORS
@@ -41,6 +59,7 @@ undefVar (Ident x) = error $ "Name error: Undefined variable: " ++ (show x)
 undefFunc (Ident f) = error $ "Name error: Undefined function: " ++ (show f)
 notArray = error $ "Type error: Not an array"
 notStruct = error $ "Type error: Not a struct"
+notFunc x = error $ concat ["Type error: Not a function: ", show x]
 undefStructEl x = error $ "Name error: Undefined struct element: " ++ (show x)
 notValidArrSub x = error $ "Type error: Not valid array subscript: " ++ (show x)
 argsNoMatch l1 l2 = let
@@ -50,6 +69,7 @@ argsNoMatch l1 l2 = let
 notIterable = error $ "Type error: Not iterable"
 arrayElemsError = error "Type error: Array elements must be of same type"
 invRetType = error "Type error: Type of return value does not match function's return type"
+invRetType2 t1 t2 = error $ concat ["Type error: Type of return value does not match function's return value. Expected: ", show t1, " , found: ", show t2]
 refTypeError = error "Type error: Expected type, found reference"
 errorMultAssign l1 l2 = error $ concat ["Error in multiple assign: ", "Expected: ", show l1 , " values, found: ", show l2]
 errorProcAssign = error "Type error: Fuction does not return any value"
@@ -60,19 +80,39 @@ emptyEnv = (M.empty, M.empty)
 -- HELPER FUNCTIONS
 newVar x t = modify (\(ev,ef) -> (M.insert x t ev,ef))
 newFunc x t args s = do
-                        (ev,ef) <- get
-                        modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef))
-                        mapM (\(x,t) -> modify (\(ev,ef) -> (M.insert x (fromRef t) ev, ef))) args
-                        rt <- checkStmt s
-                        put (ev,ef)
+                        rt <- checkFuncBody x t args s
                         if rt == t
                            then modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef)) >> return None
-                           else invRetType
+                           else invRetType2 t rt
+
+checkFuncBody x t args s = do
+                              (ev,ef) <- get
+                              modify (\(ev,ef) -> (ev, M.insert x (F (t,args)) ef))
+                              mapM (\(x,t) -> modify (\(ev,ef) -> (M.insert x (fromRef t) ev, ef))) args
+                              rt <- checkBlock (B_Block [s])
+                              put (ev,ef)
+                              return rt
 
 fromRef :: TCType -> TCType
 fromRef t = case t of
                R t -> t
                x -> x
+
+toTCType :: Type -> TCType
+toTCType t = let
+               toTCType' t = case t of
+                              T_Ref t' -> refTypeError
+                              _ -> toTCType t
+             in case t of
+                  T_Ref t' -> R $ toTCType' t'
+                  T_Arr t' -> A $ toTCType' t'
+                  T_Tup t' ts -> Tp $ map toTCType' (t':ts)
+                  T_Foo t' -> Fn (toTCType t',[])
+                  T_FooA args t' -> Fn (toTCType' t', map toTCType args)
+                  _ -> T t
+
+getParams :: [PDecl] -> FArgs
+getParams = map (\(P_Decl x t) -> (x,toTCType t))
 
 -- PROGRAM
 checkProg :: Program -> IO ()
@@ -86,6 +126,13 @@ checkProg (Prog p) = checkProg' p emptyEnv
 
 -- DECLARATIONS
 checkDecl :: MonadState Env m => Decl -> m TCType
+checkDecl (D_Var x e@(E_Lambda pd t b)) = do
+                                             let args = getParams pd
+                                             let t' = toTCType t
+                                             t'' <- checkFuncBody x t' args (S_Block b)
+                                             if t' == t''
+                                                then newVar x (FnA (t',args)) >> return None
+                                                else invRetType2 t' t''
 checkDecl (D_Var x e) = do
                            t <- checkExpr e
                            if t /= None
@@ -113,20 +160,6 @@ checkDecl (D_MVar x xs e) = do
                                                    then (mapM (\(x',t') -> newVar x' t') $ zip (x:xs) types) >> return None
                                                    else errorMultAssign l lt
                                  _ -> expectedTuple t
-
-toTCType :: Type -> TCType
-toTCType t = let
-               toTCType' t = case t of
-                              T_Ref t' -> refTypeError
-                              _ -> toTCType t
-             in case t of
-                  T_Ref t' -> R $ toTCType' t'
-                  T_Arr t' -> A $ toTCType' t'
-                  T_Tup t' -> Tp $ map toTCType' t'
-                  _ -> T t
-
-getParams :: [PDecl] -> [(Var, TCType)]
-getParams = map (\(P_Decl x t) -> (x,toTCType t))
 
 -- BLOCKS
 checkBlock :: MonadState Env m => Block -> m TCType
@@ -184,7 +217,7 @@ checkStmt (S_If e s) = do
 checkStmt (S_IfE e b s) = do
                               t <- checkExpr e
                               case t of
-                                 T T_Bool -> checkBlock b >> checkStmt s
+                                 T T_Bool -> checkBlock (B_Block [S_Block b, s])
                                  _ -> errorExpected2 (T T_Bool) t
 checkStmt (S_Return e) = checkExpr e >>= return
 checkStmt (S_Print e) = checkExpr e >> return None
@@ -199,13 +232,17 @@ checkFuncParams exprs = mapM checkExpr' exprs >>= return
                                                                   return $ R t
                                                 _ -> checkExpr e
 
-
 checkFunCall :: MonadState Env m => FCall -> m TCType
 checkFunCall (Fun_Call x exprs) = do
                                     args <- checkFuncParams exprs
                                     (ev,ef) <- get
-                                    let F (t,parTyp) = fromMaybe (undefFunc x) $ M.lookup x ef
-                                    let params = map snd parTyp
+                                    let (t,params) = case M.lookup x ev of
+                                                      Just (FnA (t,pd)) -> (t,map snd pd)
+                                                      Just (Fn x) -> x
+                                                      Nothing -> case M.lookup x ef of
+                                                         Just (F (t,pd)) -> (t, map snd pd)
+                                                         _ -> undefFunc x
+                                                      _ -> notFunc x
                                     if paramsMatch args params
                                        then return t
                                        else argsNoMatch params args
@@ -256,6 +293,7 @@ checkExpr (E_Neg e) = do
                         if t == T T_Bool
                            then return $ T T_Bool
                            else errorExpected2 (T T_Bool) e
+checkExpr (E_Lambda pd t b) = return $ FnA (toTCType t,getParams pd)
 checkExpr (E_ArrI arr) = checkArrayInit arr
 checkExpr (E_ArrI2 s e) = do
                            ts <- checkExpr s
@@ -358,5 +396,11 @@ inferType (E_VarName x) = do
                               else undefVar x
 inferType (E_FuncCall (Fun_Call f exprs)) = do
                                              (ev,ef) <- get
-                                             let F (t,_) = fromMaybe (undefFunc f) $ M.lookup f ef
+                                             let t = case M.lookup f ev of
+                                                      Just (FnA (t,_)) -> t
+                                                      Just (Fn (t,_)) -> t
+                                                      Nothing -> case M.lookup f ef of
+                                                         Just (F (t,_)) -> t
+                                                         _ -> undefFunc f
+                                                      _ -> notFunc f
                                              return t

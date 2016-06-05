@@ -72,6 +72,7 @@ data Expr
     | E_Div Expr Expr
     | E_Min Expr
     | E_Neg Expr
+    | E_Lambda [PDecl] Type Block
     | E_ArrI Array
     | E_ArrI2 Expr Expr
     | E_TupI Tuple
@@ -85,6 +86,13 @@ data Expr
 data Constant = False_Const | True_Const | Integer_Const Integer
   deriving (Eq, Ord, Show, Read)
 
-data Type = T_Int | T_Bool | T_Arr Type | T_Tup [Type] | T_Ref Type
+data Type
+    = T_Int
+    | T_Bool
+    | T_Arr Type
+    | T_Tup Type [Type]
+    | T_Ref Type
+    | T_Foo Type
+    | T_FooA [Type] Type
   deriving (Eq, Ord, Show, Read)
 

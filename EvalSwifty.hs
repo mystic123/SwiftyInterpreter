@@ -13,8 +13,9 @@ import qualified Data.Map as M
 type AArray = M.Map Int Loc
 type Struct = M.Map Var Loc
 type StructVal = M.Map Var ExprValue
+type LambdaName = Ident
 
-data ExprValue = I Integer | B Bool | A AArray | T [ExprValue] | S Struct | L [ExprValue] | SV StructVal | None
+data ExprValue = I Integer | B Bool | A AArray | T [ExprValue] | S Struct | L [ExprValue] | SV StructVal | FExpr (Env, [PDecl], Stmt) | None
 
 type Loc = Integer
 type Var = Ident
@@ -70,6 +71,8 @@ instance Show ExprValue where
                         desc = intercalate "," (map (\(Ident k,v) -> show k ++ ": " ++ show v) $ M.assocs s)
    show (T l)     = concat ["(", (intercalate "," $ map show l), ")"]
    show (L l)     = concat ["{", (intercalate "," $ map show l), "}"]
+   show (FExpr (_, pd, stmt)) = concat [show pd, show stmt]
+
 
 -- HELPER FUNCTIONS
 exprDiv :: ExprValue -> ExprValue -> ExprValue
@@ -191,6 +194,11 @@ evalDecl (D_Var x e) g k = evalExpr e g k'
                                                    g' = newVar x l g
                                                    s' = upStore l None s
                                                   in allocStruct l str g' k s'
+                                 k' (FExpr (_,pd,stmt)) s = let
+                                                               l = newLoc s
+                                                               g' = newVar x l g
+                                                               s' = upStore l (FExpr(g',pd,stmt)) s
+                                                            in k g' s'
                                  k' n s = let
                                              l = newLoc s
                                              g' = newVar x l g
@@ -363,8 +371,11 @@ evalExpr (E_Mult x y) g k = evalArithm (*) x y g k
 evalExpr (E_Div x y) g k = evalArithm (exprDiv) x y g k
 evalExpr (E_Min x) g k = evalExpr x g (\(I n) -> k $ I $ (-1)*n)
 evalExpr (E_Neg x) g k = evalExpr x g (\(B b) -> k $ B $ not b)
+evalExpr (E_Lambda pd _ b) g k = k $ FExpr (g, pd, (S_Block b))
 evalExpr (E_ArrI (Arr es)) g k = evalArray es g k
-evalExpr (E_ArrI2 size e) g k = evalExpr size g (\(I n) -> if n > 0 then evalArray (replicate (fromInteger n) e) g k else invArrSize)
+evalExpr (E_ArrI2 size e) g k = evalExpr size g (\(I n) -> if n > 0
+                                 then evalArray (replicate (fromInteger n) e) g k
+                                 else invArrSize)
 evalExpr (E_TupI (Tup e es)) g k = evalTuple (e:es) g k
 evalExpr (E_ArrS acc (Arr_Sub i)) g k = evalExpr i g k'
                                        where
@@ -384,9 +395,20 @@ evalExpr (E_StrS acc (Str_Sub y)) g k = accToLoc acc g k'
                                                          v = lookLoc l' s
                                                          v' = getExprValue v s
                                                       in k v' s
-evalExpr (E_FuncCall (Fun_Call foo args)) g k = case fromJust $ M.lookup foo $ snd g of
-                                                   F (g',pd,stmt) -> callFunc args pd stmt g g' notReturn k
-                                                   P (g',pd,stmt) -> callFunc args pd stmt g g' (k 0) k
+evalExpr (E_FuncCall (Fun_Call foo args)) g k = \s -> let
+                                                   loc = M.lookup foo $ fst g
+                                                   lbda = case loc of
+                                                            Just l -> M.lookup l s
+                                                            Nothing -> Nothing
+                                                   fnc = fromJust $ M.lookup foo $ snd g
+                                                      in case lbda of
+                                                         Just (FExpr (g',pd,stmt)) ->
+                                                            callFunc args pd stmt g g' notReturn k s
+                                                         _ -> case fnc of
+                                                            F (g',pd,stmt) ->
+                                                               callFunc args pd stmt g g' notReturn k s
+                                                            P (g',pd,stmt) ->
+                                                               callFunc args pd stmt g g' (k 0) k s
 evalExpr (E_Const c) g k = k $ evalConst c
 evalExpr (E_VarName x) g k = k'
                               where

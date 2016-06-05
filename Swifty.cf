@@ -19,7 +19,7 @@ separator            Stmt   "" ;
 separator            Expr   "," ;
 separator	nonempty	Acc	 "," ;
 separator   nonempty Ident  "," ;
-separator   nonempty Type   "," ;
+separator	nonempty Type   "," ;
 
 B_Block.  Block ::= "{" [Stmt] "}" ;
 
@@ -55,6 +55,7 @@ E_Mult.     Expr6  ::= Expr6 "*" Expr7 ;
 E_Div.      Expr6  ::= Expr6 "/" Expr7 ;
 E_Min.      Expr7  ::= "-" Expr8 ;
 E_Neg.      Expr7  ::= "!" Expr8 ;
+E_Lambda.	Expr8	 ::= "(" [PDecl] ")" "->" Type "in" Block ;
 E_ArrI.     Expr8  ::= Array ;
 E_ArrI2.		Expr8	 ::= "array" "(" Expr "," Expr ")" ;
 E_TupI.     Expr8  ::= Tuple ;
@@ -75,8 +76,11 @@ False_Const.   Constant ::= "false";
 True_Const.  	Constant ::= "true";
 Integer_Const. Constant ::= Integer;
 
+_.			Type	::= "(" Type ")" ;
 T_Int.   Type  ::= "int" ;
 T_Bool.  Type  ::= "bool" ;
 T_Arr.   Type  ::= "Array" "of" Type ;
-T_Tup.   Type  ::= "(" [Type] ")" ;
+T_Tup.   Type  ::= "(" Type "," [Type] ")" ;
 T_Ref.   Type  ::= "&" Type;
+T_Foo.	Type	::= "func" "(" ")" "->" Type ;
+T_FooA.	Type	::= "func" "(" [Type] ")" "->" Type ;

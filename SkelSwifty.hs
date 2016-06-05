@@ -77,6 +77,7 @@ transExpr x = case x of
   E_Div expr1 expr2 -> failure x
   E_Min expr -> failure x
   E_Neg expr -> failure x
+  E_Lambda pdecls type_ block -> failure x
   E_ArrI array -> failure x
   E_ArrI2 expr1 expr2 -> failure x
   E_TupI tuple -> failure x
@@ -95,6 +96,8 @@ transType x = case x of
   T_Int -> failure x
   T_Bool -> failure x
   T_Arr type_ -> failure x
-  T_Tup types -> failure x
+  T_Tup type_ types -> failure x
   T_Ref type_ -> failure x
+  T_Foo type_ -> failure x
+  T_FooA types type_ -> failure x
 
