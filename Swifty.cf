@@ -1,5 +1,5 @@
--- Autor: Paweł Kapica, 334579
--- Gramatyka języka programowania
+-- Author: Pawel Kapica, 334579
+-- Swifty language grammar 
 comment "//" ;
 comment "/*" "*/" ;
 entrypoints Program ;
