@@ -1,5 +1,5 @@
-//funkcje anonimowe musza byc funkcjami (zwracac jakas wartosc)
-//sortowanie przez wstawianie z comparatorem
+//anonymous functions has to return something
+//example: insertion sort with given comparator
 func sort(A: &Array of int, n:int, comp: func (int, int) -> bool) {
 	var i = 1
 	while (i < n) {
@@ -18,16 +18,16 @@ var arr = {1, 5, 7, 2, 6, 9, 0, 2, 7, 1}
 
 print arr
 
-//sortowanie nierosnace
+//sorting in decreasing order
 sort(arr, N, (a:int, b:int) -> bool in { return a < b })
 print arr
 
-//sortowanie niemalejace
+sorting in growing order
 var comp = (a:int, b:int) -> bool in { return a > b }
 sort(arr, N, comp)
 print arr
 
-//rekurencyjna funkcja anonimowa
+//recursive lambda
 var fibo = (n:int) -> int in {
 	if (n == 0)
 		return 0
@@ -38,11 +38,11 @@ var fibo = (n:int) -> int in {
 
 print fibo(10)
 
-//przypisanie
+//assigning lambda function to variable
 var f = fibo
 print f(10)
 
-//przekazywanie przez referencje
+//passing by reference
 var addOne = (n:&int) -> int in {
 	n = n + 1
 	return 0
